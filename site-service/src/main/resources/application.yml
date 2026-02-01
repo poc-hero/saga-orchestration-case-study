@@ -1,0 +1,10 @@
+server:
+  port: 9090
+spring:
+  application:
+    name: site-service
+
+site:
+  services:
+    uaa:
+      url: http://localhost:9091
