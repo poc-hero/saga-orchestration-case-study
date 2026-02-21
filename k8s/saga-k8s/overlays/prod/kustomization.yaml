@@ -13,7 +13,6 @@ configMapGenerator:
   - name: site-service-config
     literals:
       - SITE_SERVICES_UAA_URL=http://uaa-service:8080
-      - SERVER_PORT=8080
       - LOG_LEVEL=INFO
 
 secretGenerator:
@@ -26,6 +25,12 @@ generatorOptions:
   disableNameSuffixHash: true
 
 patches:
+  - target:
+      kind: Deployment
+    patch: |
+      - op: add
+        path: /spec/template/spec/serviceAccountName
+        value: saga-app
   - target:
       kind: Deployment
     patch: |

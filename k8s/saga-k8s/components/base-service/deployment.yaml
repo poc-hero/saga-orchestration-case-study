@@ -31,6 +31,9 @@ spec:
               port: 8080
             initialDelaySeconds: 15
             periodSeconds: 5
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=75.0"
           resources:
             requests:
               cpu: 100m

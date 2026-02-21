@@ -11,7 +11,7 @@ public class WebClientConfig {
     @Bean("uaaClient")
     WebClient uaaClient(
             WebClient.Builder builder,
-            @Value("${site.services.uaa.url:http://localhost:9091}") String baseUrl) {
+            @Value("${site.services.uaa.url:http://localhost:8080}") String baseUrl) {
         return builder.baseUrl(baseUrl).build();
     }
 }
