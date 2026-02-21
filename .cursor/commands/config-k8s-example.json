@@ -1,0 +1,4 @@
+{
+  "base": "saga-k8s",
+  "services": ["site-service", "uaa-service"]
+}

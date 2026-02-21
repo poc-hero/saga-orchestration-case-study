@@ -1,0 +1,17 @@
+# Build artifacts (Maven doit rebuilder proprement)
+**/target/
+**/.mvn/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# D'autres fichiers inutiles pour le build
+**/*.md
+**/README*
+**/.cursor/

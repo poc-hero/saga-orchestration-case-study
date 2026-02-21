@@ -1,0 +1,15 @@
+---
+description: Conventions Java réactif et Saga pour ce projet
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# Conventions Saga (Java réactif)
+
+- **Réactif** : `Mono`/`Flux`, pas de blocage. Steps : `Function<I, Mono<O>>` action, `Function<O, Mono<Void>>` compensation.
+- **Lib** : `SagaExecutor`, `SagaStep`, `TransactionContext`, `@EnableSagaExecutor` dans `com.lib.pocmaster.saga`.
+- **Steps nommés** : utiliser le 5e paramètre de `SagaStep` (name) pour les logs, ex. `"validation-and-creation"`, `"acl"`, `"indexation"`.
+- **Compensations** : chaque step doit pouvoir compenser avec le résultat de son action (ex. `siteId`, `validationId`).
+- **Logs** : `log.info` dans les composants et dans l’executor (step, transactionId, compensation).
+
+Rester cohérent avec les composants existants (ValidationComponent, SiteCreationComponent, IndexationComponent).

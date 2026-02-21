@@ -1,0 +1,14 @@
+com/pocmaster/site/site/SiteCreationComponent$SiteCreated.class
+com/pocmaster/site/saga/SiteCreationSaga.class
+com/pocmaster/site/saga/SiteCreationSaga$CreateSiteRequest.class
+com/pocmaster/site/validation/ValidationComponent.class
+com/pocmaster/site/indexation/IndexationComponent.class
+com/pocmaster/site/config/WebClientConfig.class
+com/pocmaster/site/saga/SiteCreationSaga$SiteCreatedWithFlag.class
+com/pocmaster/site/saga/SiteCreationSaga$CompensateAclBody.class
+com/pocmaster/site/site/SiteCreationComponent.class
+com/pocmaster/site/saga/SiteCreationSaga$ApplyAclBody.class
+com/pocmaster/site/validation/ValidationComponent$ValidationResult.class
+com/pocmaster/site/indexation/IndexationComponent$IndexationFailedException.class
+com/pocmaster/site/SiteController.class
+com/pocmaster/site/SiteApplication.class

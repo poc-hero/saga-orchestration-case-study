@@ -1,0 +1,9 @@
+# Logs des étapes Saga visibles pendant les tests d'intégration
+logging:
+  level:
+    com.lib.pocmaster.saga: INFO
+    com.pocmaster.site: INFO
+    com.pocmaster.site.saga: INFO
+    com.pocmaster.site.validation: INFO
+    com.pocmaster.site.site: INFO
+    com.pocmaster.site.indexation: INFO
