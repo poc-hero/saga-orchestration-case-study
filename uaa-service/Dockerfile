@@ -12,14 +12,17 @@ COPY uaa-service/src uaa-service/src/
 
 RUN mvn package -pl uaa-service -am -Dmaven.test.skip=true -B
 
+# Sélectionner le JAR exécutable (le plus gros = fat jar avec Main-Class, pas le *-plain.jar)
+RUN cd /build/uaa-service/target && \
+    cp $(ls -S *.jar 2>/dev/null | grep -v '\.original$' | head -1) /build/app.jar
+
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-# Copier le JAR exécutable (exclure *-plain.jar qui n'a pas de Main-Class)
-COPY --from=build /build/uaa-service/target/uaa-service-1.0.0-SNAPSHOT.jar app.jar
+COPY --from=build /build/app.jar app.jar
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
