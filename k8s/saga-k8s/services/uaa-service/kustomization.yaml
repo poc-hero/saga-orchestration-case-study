@@ -1,0 +1,60 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+components:
+  - ../../components/base-service
+
+patches:
+  - target:
+      name: base-service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: uaa-service
+
+  - target:
+      kind: Deployment
+      name: base-service
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: andr7w/saga-orchestration-uaa-service:latest
+      - op: replace
+        path: /metadata/labels/app
+        value: uaa-service
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: uaa-service
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: uaa-service
+      - op: add
+        path: /spec/template/spec/containers/0/env
+        value:
+          - name: SERVER_PORT
+            value: "8080"
+
+  - target:
+      kind: Service
+      name: base-service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: uaa-service
+      - op: replace
+        path: /spec/selector/app
+        value: uaa-service
+
+  - target:
+      kind: Ingress
+      name: base-service
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: uaa-service
+      - op: replace
+        path: /spec/rules/0/host
+        value: uaa-service.saga-k8s.local
+      - op: replace
+        path: /spec/rules/0/http/paths/0/backend/service/name
+        value: uaa-service

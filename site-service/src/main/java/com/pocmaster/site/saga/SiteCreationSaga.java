@@ -2,6 +2,7 @@ package com.pocmaster.site.saga;
 
 import com.lib.pocmaster.saga.SagaExecutor;
 import com.lib.pocmaster.saga.SagaStep;
+import com.pocmaster.site.indexation.IndexationComponent;
 import com.pocmaster.site.site.SiteCreationComponent;
 import com.pocmaster.site.validation.ValidationComponent;
 import org.slf4j.Logger;
@@ -19,56 +20,67 @@ public class SiteCreationSaga {
     private final ValidationComponent validationComponent;
     private final SiteCreationComponent siteCreationComponent;
     private final WebClient uaaClient;
+    private final IndexationComponent indexationComponent;
 
     public SiteCreationSaga(
             ValidationComponent validationComponent,
             SiteCreationComponent siteCreationComponent,
-            @Qualifier("uaaClient") WebClient uaaClient) {
+            @Qualifier("uaaClient") WebClient uaaClient,
+            IndexationComponent indexationComponent) {
         this.validationComponent = validationComponent;
         this.siteCreationComponent = siteCreationComponent;
         this.uaaClient = uaaClient;
+        this.indexationComponent = indexationComponent;
     }
 
     public Mono<Void> run(CreateSiteRequest request) {
-        log.info("Saga run started: companyId={}, siteName={}", request.companyId(), request.siteName());
-        SagaStep<CreateSiteRequest, ValidationComponent.ValidationResult> step1 =
+        log.info("Saga run started: companyId={}, siteName={}, failIndexation={}", request.companyId(), request.siteName(), request.failIndexation());
+
+        // Step 1: validation + creation (merged)
+        SagaStep<CreateSiteRequest, SiteCreatedWithFlag> step1 =
                 new SagaStep<>(
-                        req -> validationComponent.validate(req.companyId(), req.siteName()),
-                        result -> validationComponent.compensate(result.validationId()),
+                        req -> validationComponent.validate(req.companyId(), req.siteName())
+                                .flatMap(validation -> siteCreationComponent.create(
+                                        validation.validationId(),
+                                        validation.companyId(),
+                                        validation.siteName())
+                                        .map(site -> new SiteCreatedWithFlag(site, Boolean.TRUE.equals(req.failIndexation())))),
+                        flag -> siteCreationComponent.compensate(flag.site.siteId())
+                                .then(validationComponent.compensate(flag.site.validationId())),
                         true,
                         true,
-                        "validation"
+                        "validation-and-creation"
                 );
 
-        SagaStep<ValidationComponent.ValidationResult, SiteCreationComponent.SiteCreated> step2 =
+        // Step 2: ACL
+        SagaStep<SiteCreatedWithFlag, SiteCreatedWithFlag> step2 =
                 new SagaStep<>(
-                        validation -> siteCreationComponent.create(
-                                validation.validationId(),
-                                validation.companyId(),
-                                validation.siteName()),
-                        site -> siteCreationComponent.compensate(site.siteId()),
-                        true,
-                        true,
-                        "create-site"
-                );
-
-        SagaStep<SiteCreationComponent.SiteCreated, SiteCreationComponent.SiteCreated> step3 =
-                new SagaStep<>(
-                        site -> uaaClient.post()
+                        flag -> uaaClient.post()
                                 .uri("/api/acl/apply")
-                                .bodyValue(new ApplyAclBody(site.siteId()))
+                                .bodyValue(new ApplyAclBody(flag.site.siteId()))
                                 .retrieve()
                                 .toBodilessEntity()
-                                .then(Mono.just(site)),
-                        site -> uaaClient.post()
+                                .then(Mono.just(flag)),
+                        flag -> uaaClient.post()
                                 .uri("/api/acl/compensate")
-                                .bodyValue(new CompensateAclBody(site.siteId()))
+                                .bodyValue(new CompensateAclBody(flag.site.siteId()))
                                 .retrieve()
                                 .toBodilessEntity()
                                 .then(),
                         true,
                         true,
                         "acl"
+                );
+
+        // Step 3: indexation (composante interne) — succeed=true → OK, succeed=false → erreur → déclenche compensations
+        SagaStep<SiteCreatedWithFlag, SiteCreatedWithFlag> step3 =
+                new SagaStep<>(
+                        flag -> indexationComponent.publish(flag.site.siteId(), !flag.failIndexation())
+                                .then(Mono.just(flag)),
+                        flag -> indexationComponent.compensate(flag.site.siteId()),
+                        true,
+                        true,
+                        "indexation"
                 );
 
         return new SagaExecutor()
@@ -81,7 +93,15 @@ public class SiteCreationSaga {
                 .doOnError(e -> log.info("Saga run failed: companyId={}, siteName={}, error={}", request.companyId(), request.siteName(), e.getMessage()));
     }
 
-    public record CreateSiteRequest(String companyId, String siteName) {}
+    /** failIndexation=true → step 3 (indexation) échoue volontairement pour illustrer les compensations. */
+    public record CreateSiteRequest(String companyId, String siteName, Boolean failIndexation) {
+        public CreateSiteRequest(String companyId, String siteName) {
+            this(companyId, siteName, null);
+        }
+    }
+
+    private record SiteCreatedWithFlag(SiteCreationComponent.SiteCreated site, boolean failIndexation) {}
+
     private record ApplyAclBody(String siteId) {}
     private record CompensateAclBody(String siteId) {}
 }

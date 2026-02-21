@@ -105,7 +105,7 @@ public class SagaExecutor {
      */
     private <T> Mono<T> runInTransaction(Supplier<Mono<T>> action) {
         return Mono.deferContextual(ctx -> {
-            log.info("runInTransaction: transactionId={}", TransactionContext.getTransactionId(ctx));
+            log.debug("runInTransaction: transactionId={}", TransactionContext.getTransactionId(ctx));
             return action.get();
         });
     }

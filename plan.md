@@ -1,158 +1,66 @@
-## Saga Orchestration
+# Plan d'article : Saga en orchestration – création d'un site client
 
 ---
 
-### Le pattern Saga et le choix de l'orchestration
+## 1. Le pattern Saga et le choix de l'orchestration
 
-Le pattern Saga intervient dans un système distribué lorsque plusieurs services doivent participer à l’exécution d’une transaction (souvent globale).
-La contrainte ici est que chaque service possède son système de transaction locale, qui n’est pas forcément compatible avec celui des autres, dans un contexte bien défini.
 
-L’objectif est de pouvoir garantir que le flux d’exécution soit coherent et surtout lorsqu'un comportement inattendu survient lors de l'execution de la requete.
-Pour y arriver, on va mettre sur pied un système que l’on appelle Saga Transaction.
 
-Le Design Pattern Saga peut être implémenté suivant deux modes :
 
-* **Le mode Chorégraphie** :
-  Ici, les différents services participants à la transaction communiquent via des événements et sont responsables de publier des `ActionEvent` et des `FailedEvent` afin que les souscripteurs puissent prendre action et garantir l’équilibre du système.
+Quand plusieurs services autonomes doivent travailler ensemble, on ne peut pas s'appuyer sur une grosse transaction unique : chaque service a son modèle, sa base, ses règles. Faire un rollback technique sur tout le système ? On oublie. Le **pattern Saga** part de là : une succession de transactions locales, chacune avec une **action de compensation** si quelque chose casse plus loin. L'enjeu n'est pas de revenir en arrière techniquement, mais de préserver la **cohérence métier** du système.
 
-* **Le mode Orchestration** :
-  Ici, on a un composant qui est chargé d’orchestrer l’exécution des différents services et, de ce fait, de garantir l’équilibre du système.
+On peut mettre une Saga en œuvre de deux manières : en **chorégraphie** (chaque service décide quoi faire ensuite) ou en **orchestration** (un pilote central enchaîne les étapes). Ici on retient l'orchestration. Pas par préférence technique : parce que le processus qu'on modélise — la création d'un site client — est une séquence ordonnée, avec des validations croisées et des règles de gouvernance qu'on veut explicites. En centralisant le pilotage, on rend ces règles visibles, traçables, auditables, au lieu de les noyer dans chaque service.
+
+Dans une Saga orchestrée, un composant dédié enchaîne les étapes, suit l'état courant et déclenche les compensations quand il faut. Les services métier restent autonomes et transactionnels chez eux ; ils ne portent pas la cohérence globale. Cette séparation compte : la complexité du workflow reste à un endroit, au lieu de se diffuser partout.
 
 ---
 
-### Cas pratique : création d’un site client multi-référentiels
+## 2. Contexte métier : création d'un site client multi-référentiels
 
-* On souhaite créer un site B2B
-* À la création du site, il doit avoir des règles d’administration du site (ACL) bien définies
-* Le site doit être correctement indexé pour être fonctionnel pour l’ensemble du système
+Le cas qu'on étudie : **créer un site client** dans un SI B2B. Un site, c'est une entité opérationnelle concrète — une agence, un site industriel, un chantier, une unité rattachée à une entreprise. Le créer ne revient pas à « persister une ligne en base » : il faut l'inscrire correctement dans **plusieurs référentiels** indépendants.
 
----
+Avant qu'un site soit vraiment utilisable, il doit être rattaché à une entreprise existante, associé à des acteurs responsables identifiés, protégé par des règles d'accès explicites, et visible dans les outils de recherche internes. Chaque aspect est géré par un service à part, avec ses contraintes et son cycle de vie. Aucun de ces services ne détient à lui seul la définition d'un « site valide » au sens métier.
 
-### Justification de l’utilisation
-
-* La Saga, en général, est un pattern qui prend son sens dans un environnement distribué. Autrement, il suffirait de mettre en place un système transactionnel traditionnel avec un seul service
-* Dans notre cas, nous avons une fonctionnalité de création de site B2B qui n’a de sens que lorsque la création, l’attribution des ACL et l’indexation ont réussi **(A)**
-* En cas d’échec lors d’une des trois étapes, peu importe le stade, les executions precedentes doivent compensees (ex. si l’indexation du site échoue, les ACL doivent être révoqués et le site supprimé). On ne veut pas de site orphelin **(B)**
-* D’autre part, le système présente plusieurs services (`site-service`, `uaa-service`) **(C)**
-
-Les énoncés **A**, **B** et **C** ci-dessus justifient techniquement la raison de l’utilisation du Design Pattern Saga.
-Dans cette partie de l’article, nous allons utiliser la **Saga Orchestration**.
+L'invariant qui compte : **un site n'existe (au sens métier) que s'il est à la fois gouverné, sécurisé et publiable.** Un site à moitié configuré ne doit jamais être visible ni exploitable. C'est cet invariant qui justifie la Saga : elle ne garantit pas l'existence technique du site, mais **la validité de son existence**.
 
 ---
 
-### La Saga Orchestration
+## 3. Déroulement logique de la Saga
 
-Nous aurons les composants suivants :
+La Saga de création de site s'articule en **quatre étapes**.
 
-* **Site-service** : ce service permet la gestion du site web. Pour ce qui nous concerne, la création du site et l’indexation
-* **Uaa-service** : ce service permet la gestion des authentifications et des autorisations. Pour ce qui nous concerne, la création des autorisations ou règles d’accès au site
-* **Saga-orchestration-lib** : c’est la librairie qui encapsule la logique d’orchestration
-* Le tout sera déclenché via un endpoint de création de site exposé dans le `site-service`
+D'abord la **validation des référentiels amont** — entreprise, partenaires humains, etc. Une fois ces préconditions satisfaites, le site peut être **créé** dans un état transitoire. Ensuite on applique les **règles d'accès** : qui peut voir et administrer ce site. Enfin l'**indexation** : l'acte de publication, qui rend le site visible dans la recherche et la navigation.
 
-Le schéma ci-dessous illustre la Saga Orchestration en action dans notre contexte.
+Chaque étape est transactionnelle localement, mais aucune ne suffit à elle seule. Ce n'est que quand toute la chaîne a réussi que le site peut être considéré comme actif.
 
 ---
 
-### La compensation avec Saga
+## 4. Les erreurs dans ce contexte
 
-La compensation est une étape essentielle dans une transaction Saga.
-Elle est équivalente au rollback dans une transaction traditionnelle.
+Ici, les échecs ne viennent pas d'un bug ponctuel ou d'une panne. Ils tiennent à la façon dont les référentiels vivent chacun de leur côté : l'entreprise peut être devenue inactive, un partenaire avoir perdu son périmètre, les données être un peu décalées entre services. Ça arrive tout le temps quand chaque référentiel évolue en autonomie.
 
-Dans la Saga Orchestration, comme vu précédemment, chaque élément transactionnel est implémenté en deux parties.
-Pour l’élément transactionnel de création des ACL, par exemple, l’action consiste à créer une ACL et la compensation consiste à supprimer l’ACL.
+À l'étape de création du site, on peut avoir des échecs locaux, mais le vrai sujet c'est l'état qu'on laisse derrière soi : un site créé sans être ensuite sécurisé ni publié n'a pas de valeur métier. Les ACL, elles, sont particulièrement sensibles — règles de sécurité, hiérarchies d'accès, cohérence des référentiels humains. Si ça casse là, le site ne peut plus être gouverné correctement ; il existe peut-être en base, mais il est invalide et il faut le compenser. Enfin l'indexation, l'acte de publication : elle peut refuser un objet incomplet ou non sécurisé. Un site non indexé reste invisible ; le laisser tel quel crée une incohérence qu'on aura du mal à rattraper plus tard.
 
----
-
-### Implémentation de la Saga Orchestration
-
-*(capture de l’arborescence)*
-
-#### Modèle d’exécution de chaque étape de nos unités transactionnelles
-
-```java
-public record MultiflexSagaStep<I, O>(
-        Function<I, Mono<O>> action,
-        Function<O, Mono<Void>> compensation,
-        boolean transactionalAction,
-        boolean transactionalCompensation
-) {}
-```
-
-Chaque step comprend :
-
-* **action** : la fonction qui exécute l’action. Elle produit un résultat qui servira d’input à la prochaine step et à la compensation.
-  Si `transactionalAction = false`, l’étape ne s’exécute pas.
-
-* **compensation** : la fonction qui compense l’exécution de l’action.
-  Elle sera appelée automatiquement à l’étape *n* ou *n+1* en cas d’échec.
-  Si `transactionalCompensation = false`, l’étape ne s’exécute pas.
+Dans tous ces cas, la Saga ne vise pas à « réparer un peu » : elle ramène à un invariant simple — soit le site est pleinement valide, soit il n'existe pas.
 
 ---
 
-### Exemple d’orchestration
+## 5. (À rédiger) Compensations et gestion des états
 
-```java
-public Mono<Void> run(CreateSiteRequest request) {
-
-    SagaStep<CreateSiteRequest, ValidationResult> validateReferences =
-        new SagaStep<>(
-            this::validateCompanyAndActors,
-            this::compensateValidation,
-            true,
-            true
-        );
-
-    SagaStep<ValidationResult, SiteCreated> createSite =
-        new SagaStep<>(
-            this::createSite,
-            this::deleteSite,
-            true,
-            true
-        );
-
-    SagaStep<SiteCreated, SiteWithAcl> applyAcl =
-        new SagaStep<>(
-            this::applyAccessRules,
-            this::removeAccessRules,
-            true,
-            true
-        );
-
-    SagaStep<SiteWithAcl, Void> indexSite =
-        new SagaStep<>(
-            this::indexSite,
-            this::removeIndex,
-            true,
-            true
-        );
-
-    return sagaExecutor
-        .newExecution(request)
-        .addStep(validateReferences)
-        .addStep(createSite)
-        .addStep(applyAcl)
-        .addStep(indexSite)
-        .execute();
-}
-```
+*À venir : comment on déclenche les compensations, dans quel ordre, et comment on représente les états de la Saga (en cours, compensée, terminée).*
 
 ---
 
-### Explication
+## 6. (À rédiger) Pourquoi un simple workflow asynchrone ne suffit pas
 
-```java
-return sagaExecutor
-    .newExecution(request)   // Initialise une nouvelle instance de Saga avec la requête métier comme contexte initial
-    .addStep(step1)          // Enregistre la première étape de la Saga ; son résultat devient l’entrée de l’étape suivante
-    .addStep(step2)          // Ajoute une étape dépendante de la précédente, exécutée uniquement si celle-ci a réussi
-    .addStep(step3)          // Étape d’attribution des ACL
-    .addStep(step4)          // Étape d’indexation du site
-    .execute();              // Lance l’exécution séquentielle et déclenche les compensations en cas d’échec
-```
+*À venir : en conclusion, ce qui distingue un workflow « fire and forget » d'une Saga avec compensations et invariant métier.*
 
 ---
 
-### Code source
+## 7. (Optionnel) Version « case study » pour Medium / blog tech
 
-Pour avoir l’intégralité du code source, voici le lien du dépôt GitHub :
-[https://github.com/poc-hero/saga-orchestration-case-study](https://github.com/poc-hero/saga-orchestration-case-study)
+*Idée : reprendre le même contenu en case study plus narrative — problème de départ, vision naïve, rappel sur la Saga orchestrée, anti-pattern (microservices découpés pour la Saga), repenser la structure (bounded contexts, moins de services artificiels), conclusion « la Saga au service du design ».*
+
+---
+
+On élargira ce plan au fur et à mesure pour une meilleure implémentation.

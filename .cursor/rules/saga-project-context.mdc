@@ -1,0 +1,14 @@
+---
+description: Contexte du projet Saga (modules, packages, étapes) pour interpréter les prompts
+alwaysApply: true
+---
+
+# Saga orchestration – contexte projet
+
+- **Modules Maven** : `saga-transaction-lib` (lib), `site-service` (Saga + validation, création, indexation), `uaa-service` (ACL).
+- **Packages** : `com.lib.pocmaster.saga` (lib), `com.pocmaster.site`, `com.pocmaster.uaa`.
+- **Saga en 3 étapes** : 1) validation-and-creation, 2) acl (UAA HTTP), 3) indexation (composante interne). Compensations en ordre inverse en cas d’échec.
+- **Paramètre démo** : `failIndexation=true` dans la requête pour forcer l’échec à l’indexation et déclencher les compensations.
+- **Tests** : intégration avec Testcontainers (WireMock pour UAA), `mvn -pl site-service test`.
+
+Quand l’utilisateur demande d’ajouter une étape, de lancer les tests, de modifier la Saga ou les compensations, utiliser ce contexte.
