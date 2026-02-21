@@ -103,30 +103,17 @@ mkdir -p ~/.kube
 sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
 sudo chown $(id -u):$(id -g) ~/.kube/config
 chmod 600 ~/.kube/config
+echo 'export KUBECONFIG=~/.kube/config' >> ~/.bashrc
+source ~/.bashrc
 ```
 
 Ensuite : `kubectl apply -k ...` fonctionnera normalement.
 
 ---
 
-## Commandes utiles sur le master
+## Commandes kubectl
 
-```bash
-# Vérifier les nœuds
-kubectl get nodes
-
-# Vérifier les pods (dev)
-kubectl get pods -n saga-k8s-dev -o wide
-
-# Logs site-service
-kubectl logs -l app=site-service -n saga-k8s-dev -f
-
-# Logs uaa-service
-kubectl logs -l app=uaa-service -n saga-k8s-dev -f
-
-# Supprimer le déploiement
-kubectl delete -k ~/k8s/saga-k8s/overlays/dev/
-```
+Voir le fichier [KUBECTL_CHEATSHEET.md](./KUBECTL_CHEATSHEET.md) pour la liste complète (pods, logs, deployments, services, debug, etc.).
 
 ---
 
