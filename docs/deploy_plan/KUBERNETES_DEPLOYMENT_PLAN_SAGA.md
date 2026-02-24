@@ -50,51 +50,135 @@ Secrets  ←  Vault  (External Secrets Operator)
 
 **Rôle** : décrire comment tournent **site-service** et **uaa-service** dans le cluster.
 
-### 1.1 Structure proposée pour `saga-k8s`
+### 1.1 Structure de `saga-k8s` (Kustomize + Components)
+
+Le dossier `k8s/saga-k8s` utilise **Kustomize** avec l'approche **Component** : un composant générique (`base-service`) est patchépar chaque service, puis composé dans les overlays par environnement.
 
 ```text
-saga-k8s/
+k8s/saga-k8s/
 ├── README.md
-├── base/                                    # Manifests bruts (optionnel, pour apprentissage)
-│   ├── namespace.yaml
+├── components/
+│   └── base-service/                        # Kustomize Component — template réutilisable
+│       ├── kustomization.yaml               # kind: Component (apiVersion v1alpha1)
+│       ├── deployment.yaml                  # Deployment générique (name: base-service)
+│       ├── service.yaml                     # Service ClusterIP générique (port 8080)
+│       └── ingress.yaml                     # Ingress générique (nginx rewrite-target)
+├── services/
 │   ├── site-service/
-│   │   ├── deployment.yaml
-│   │   ├── service.yaml
-│   │   └── ingress.yaml
-│   ├── uaa-service/
-│   │   ├── deployment.yaml
-│   │   ├── service.yaml
-│   │   └── ingress.yaml
-│   └── kustomization.yaml                  # Optionnel : overlays dev/prod
+│   │   └── kustomization.yaml              # Utilise le component, patches : image, labels,
+│   │                                        #   envFrom (configMapRef site-service-config),
+│   │                                        #   Service name, Ingress host
+│   └── uaa-service/
+│       └── kustomization.yaml              # Idem : image, labels, Service name, Ingress host
 ├── overlays/
 │   ├── dev/
+│   │   ├── kustomization.yaml              # namespace: saga-k8s-dev
+│   │   │                                    #   resources: namespace, serviceaccount, services/*
+│   │   │                                    #   configMapGenerator (SITE_SERVICES_UAA_URL, LOG_LEVEL)
+│   │   │                                    #   secretGenerator (dockerhub-creds)
+│   │   │                                    #   patches: serviceAccountName saga-app
+│   │   ├── namespace.yaml                  # Namespace saga-k8s-dev
+│   │   ├── serviceaccount-default.yaml     # ServiceAccount saga-app + imagePullSecrets
+│   │   └── secrets/
+│   │       └── dockerconfigjson.dev.json   # Docker registry credentials (dev)
 │   └── prod/
-├── helm/
-│   ├── site-service/                       # Chart Helm site-service
-│   │   ├── Chart.yaml
-│   │   ├── values.yaml
-│   │   └── templates/
-│   │       ├── deployment.yaml
-│   │       ├── service.yaml
-│   │       ├── ingress.yaml
-│   │       ├── configmap.yaml              # application.yaml + site.services.uaa.url
-│   │       └── _helpers.tpl
-│   ├── uaa-service/                        # Chart Helm uaa-service
-│   │   ├── Chart.yaml
-│   │   ├── values.yaml
-│   │   └── templates/
-│   │       ├── deployment.yaml
-│   │       ├── service.yaml
-│   │       ├── ingress.yaml
-│   │       ├── configmap.yaml
-│   │       └── _helpers.tpl
-│   └── saga-env/                           # Chart umbrella (optionnel)
-│       ├── Chart.yaml                      # dependencies: site-service, uaa-service
-│       └── values.yaml
-└── vault/
+│       ├── kustomization.yaml              # namespace: saga-k8s-prod
+│       │                                    #   idem dev + patch replicas: 2, LOG_LEVEL=INFO
+│       ├── namespace.yaml                  # Namespace saga-k8s-prod
+│       ├── serviceaccount-default.yaml
+│       └── secrets/
+│           └── dockerconfigjson.prod.json  # Docker registry credentials (prod)
+└──   vault/                                   # (optionnel) Vault policies
     ├── policy.hcl.example
     └── README.md
 ```
+
+> **Helm** : les charts Helm sont dans un dossier **indépendant** `k8s/saga-k8s-helm/` (voir section 1.1b ci-dessous).
+
+#### Fonctionnement Kustomize
+
+| Couche | Rôle | Fichier clé |
+|--------|------|-------------|
+| **Component** (`components/base-service/`) | Template générique : Deployment (probes, resources, `JAVA_TOOL_OPTIONS`), Service ClusterIP :8080, Ingress nginx. | `kustomization.yaml` (kind: Component) |
+| **Service** (`services/<name>/`) | Spécialise le component : image Docker, labels `app: <name>`, nom Service/Ingress, host Ingress, `envFrom` (site-service uniquement). | `kustomization.yaml` (patches JSON Patch) |
+| **Overlay** (`overlays/<env>/`) | Compose les services dans un namespace (`saga-k8s-dev`/`saga-k8s-prod`), injecte ConfigMap (URL UAA, log level), Secret (docker creds), ServiceAccount. | `kustomization.yaml` (configMapGenerator, secretGenerator) |
+
+Déploiement d'un environnement :
+
+```bash
+# Dev
+kubectl apply -k k8s/saga-k8s/overlays/dev
+
+# Prod
+kubectl apply -k k8s/saga-k8s/overlays/prod
+```
+
+### 1.1b Structure de `saga-k8s-helm` (Helm charts — indépendant, approche DRY)
+
+Le dossier `k8s/saga-k8s-helm/` contient les mêmes services sous forme de **Helm charts**, avec un **library chart** partagé pour éviter la duplication. Il est **indépendant** de `saga-k8s` (Kustomize) et ne nécessite **aucun outil GitOps** (Argo CD) — `helm install` suffit.
+
+```text
+k8s/saga-k8s-helm/
+├── saga-service-lib/                        # Library chart (type: library) — templates réutilisables
+│   ├── Chart.yaml                           # type: library — ne se déploie pas seul
+│   └── templates/
+│       ├── _helpers.tpl                      # fullname, labels, selectorLabels
+│       ├── _deployment.yaml                  # define "saga-service-lib.deployment"
+│       ├── _service.yaml                     # define "saga-service-lib.service"
+│       ├── _ingress.yaml                     # define "saga-service-lib.ingress"
+│       ├── _configmap.yaml                  # define "saga-service-lib.configmap"
+│       └── _serviceaccount.yaml              # define "saga-service-lib.serviceaccount"
+├── site-service/                            # Chart applicatif — dépend de saga-service-lib
+│   ├── Chart.yaml                            # dependencies: saga-service-lib (file://../saga-service-lib)
+│   ├── values.yaml                           # image, env (SITE_SERVICES_UAA_URL), ingress.host, etc.
+│   ├── values-dev.yaml
+│   ├── values-prod.yaml
+│   └── templates/                            # Fichiers légers : {{ include "saga-service-lib.xxx" . }}
+│       ├── deployment.yaml
+│       ├── service.yaml
+│       ├── ingress.yaml
+│       ├── configmap.yaml
+│       └── serviceaccount.yaml
+└── uaa-service/
+    └── (même structure — values spécifiques uaa-service)
+```
+
+**Principe DRY** : la logique commune (Deployment, Service, Ingress, ConfigMap, ServiceAccount) est définie une seule fois dans `saga-service-lib`. Les charts applicatifs ne fournissent que leurs valeurs. Avant le premier déploiement : `helm dependency update` dans chaque chart.
+
+#### Déploiement Helm (sans Argo CD)
+
+```bash
+# Dev — déployer les deux services
+helm install uaa-service ./k8s/saga-k8s-helm/uaa-service \
+  -n saga-helm-dev --create-namespace \
+  -f ./k8s/saga-k8s-helm/uaa-service/values-dev.yaml
+
+helm install site-service ./k8s/saga-k8s-helm/site-service \
+  -n saga-helm-dev --create-namespace \
+  -f ./k8s/saga-k8s-helm/site-service/values-dev.yaml
+
+# Mettre à jour (nouvelle image)
+helm upgrade site-service ./k8s/saga-k8s-helm/site-service \
+  -n saga-helm-dev \
+  -f ./k8s/saga-k8s-helm/site-service/values-dev.yaml \
+  --set image.tag=1.2.0
+
+# Rollback
+helm rollback site-service 1 -n saga-helm-dev
+
+# Désinstaller
+helm uninstall site-service -n saga-helm-dev
+```
+
+#### Comparaison Kustomize vs Helm
+
+| | saga-k8s (Kustomize) | saga-k8s-helm (Helm) |
+|--|----------------------|----------------------|
+| **Paramétrage** | Overlays + patches JSON | `values.yaml` + `--set` |
+| **Déploiement** | `kubectl apply -k` | `helm install/upgrade` |
+| **Rollback** | `kubectl rollout undo` | `helm rollback` (avec historique) |
+| **Namespace** | Défini dans kustomization.yaml | Flag `-n` + `--create-namespace` |
+| **Pré-requis** | kubectl seul | Helm 3 + kubectl |
 
 ### 1.2 Points spécifiques Saga
 
@@ -277,10 +361,10 @@ spec:
 
 | Step | Action | Projet |
 |------|--------|--------|
-| 1 | Créer **saga-k8s** avec structure `base/` + `helm/` (charts **site-service**, **uaa-service**). | saga-k8s |
-| 2 | Écrire les manifests **base** (Namespace, Deployment, Service, Ingress) pour site-service et uaa-service. | saga-k8s |
-| 3 | Ajouter probes, resources, ConfigMap (application.yaml, **site.services.uaa.url** pour site-service). | saga-k8s |
-| 4 | Créer les **Helm charts** site-service et uaa-service ; paramétrage image tag, env, URL UAA. | saga-k8s |
+| 1 | Créer **saga-k8s** avec structure Kustomize (`components/`, `services/`, `overlays/`). | saga-k8s |
+| 2 | Écrire le Component base-service (Deployment, Service, Ingress) et les patches par service. | saga-k8s |
+| 3 | Ajouter probes, resources, ConfigMap (URL UAA, LOG_LEVEL pour site-service), overlays dev/prod. | saga-k8s |
+| 4 | Créer **saga-k8s-helm** : Helm charts **site-service** et **uaa-service** + values par env. | saga-k8s-helm |
 | 5 | S’assurer que **site-service** et **uaa-service** ont un Dockerfile et un build d’image (CI → registry). | saga-orchestration-case-study |
 | 6 | Créer **saga-delivery** : **saga-dev-version.yaml**, **saga-prod-version.yaml**, ApplicationSet Argo CD. | saga-delivery |
 | 7 | Installer Argo CD ; déployer l’ApplicationSet ; vérifier que site-service et uaa-service tournent dans `saga-dev`. | saga-delivery / cluster |
@@ -295,7 +379,8 @@ spec:
 
 | Repo | Contenu |
 |------|---------|
-| **saga-k8s** | Manifests K8s, Helm charts **site-service** et **uaa-service**, modèles ESO. |
+| **saga-k8s** | Manifests K8s (Kustomize : components, services, overlays), modèles ESO. |
+| **saga-k8s-helm** | Helm charts **site-service** et **uaa-service**, values par env (dev/prod). |
 | **saga-delivery** | Fichiers de versions par env (**saga-&lt;env&gt;-version.yaml**), ApplicationSet Argo CD, config par service/env. |
 | **saga-terraform** | (Optionnel) Cluster, Vault, DNS, state remote. |
 | **saga-orchestration-case-study** | Code source (site-service, uaa-service, saga-transaction-lib), Dockerfiles, CI. |
@@ -314,10 +399,10 @@ spec:
 
 ## Premier pas concret
 
-1. Créer le repo **saga-k8s** avec `base/site-service/`, `base/uaa-service/` et `helm/site-service/`, `helm/uaa-service/`.
-2. Écrire Deployment + Service pour **uaa-service** puis **site-service** (avec ConfigMap pour `site.services.uaa.url`).
+1. **Kustomize** : déployer avec `kubectl apply -k k8s/saga-k8s/overlays/dev`.
+2. **Helm** : déployer avec `helm install` depuis `k8s/saga-k8s-helm/` (voir section 1.1b).
 3. Tester en local avec **minikube** ou **kind** : déployer uaa-service, puis site-service, appeler `http://<site-service>/api/site/create`.
-4. Ajouter **saga-delivery** avec **saga-dev-version.yaml** et ApplicationSet ; connecter Argo CD au repo saga-k8s et synchroniser.
+4. (Optionnel) Ajouter **saga-delivery** avec ApplicationSet Argo CD pour automatiser la synchro.
 
 ---
 
@@ -331,9 +416,14 @@ kubectl logs -f deployment/uaa-service -n saga-dev
 kubectl rollout status deployment/site-service -n saga-dev
 kubectl rollout undo deployment/site-service -n saga-dev
 
-# Helm (depuis saga-k8s)
-helm install site-service ./helm/site-service -n saga-dev -f values-dev.yaml
-helm upgrade site-service ./helm/site-service -n saga-dev --set image.tag=1.0.0
+# Kustomize
+kubectl apply -k k8s/saga-k8s/overlays/dev
+kubectl apply -k k8s/saga-k8s/overlays/prod
+
+# Helm (depuis saga-k8s-helm)
+helm install site-service ./k8s/saga-k8s-helm/site-service -n saga-helm-dev -f ./k8s/saga-k8s-helm/site-service/values-dev.yaml
+helm upgrade site-service ./k8s/saga-k8s-helm/site-service -n saga-helm-dev --set image.tag=1.0.0
+helm rollback site-service 1 -n saga-helm-dev
 
 # Argo CD
 argocd app sync site-service-dev

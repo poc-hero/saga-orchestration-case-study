@@ -1,0 +1,10 @@
+replicaCount: 1
+
+image:
+  tag: latest
+
+env:
+  LOG_LEVEL: "DEBUG"
+
+ingress:
+  host: uaa-service.saga-k8s.local

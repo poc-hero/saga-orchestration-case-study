@@ -1,0 +1,16 @@
+{{- define "saga-service-lib.service" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "saga-service-lib.fullname" . }}
+  labels:
+    {{- include "saga-service-lib.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "saga-service-lib.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+{{- end }}

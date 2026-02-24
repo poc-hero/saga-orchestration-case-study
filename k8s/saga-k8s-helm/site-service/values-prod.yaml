@@ -1,0 +1,19 @@
+replicaCount: 2
+
+image:
+  tag: "1.0.0"
+
+env:
+  SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
+  LOG_LEVEL: "INFO"
+
+ingress:
+  host: site-service.saga.example.com
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi

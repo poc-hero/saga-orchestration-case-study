@@ -1,0 +1,11 @@
+replicaCount: 1
+
+image:
+  tag: latest
+
+env:
+  SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
+  LOG_LEVEL: "DEBUG"
+
+ingress:
+  host: site-service.saga-k8s.local

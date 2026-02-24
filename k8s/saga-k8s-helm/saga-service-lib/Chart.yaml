@@ -1,0 +1,5 @@
+apiVersion: v2
+name: saga-service-lib
+description: Library chart — templates réutilisables pour site-service et uaa-service
+type: library
+version: 0.1.0

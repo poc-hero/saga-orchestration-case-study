@@ -1,0 +1,12 @@
+{{- define "saga-service-lib.configmap" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "saga-service-lib.fullname" . }}-config
+  labels:
+    {{- include "saga-service-lib.labels" . | nindent 4 }}
+data:
+  {{- range $key, $val := .Values.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}
+{{- end }}

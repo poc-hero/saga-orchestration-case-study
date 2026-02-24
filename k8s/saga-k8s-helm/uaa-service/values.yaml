@@ -1,0 +1,45 @@
+replicaCount: 1
+
+image:
+  repository: andr7w/saga-orchestration-uaa-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  host: uaa-service.saga-k8s.local
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+
+env:
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0"
+  LOG_LEVEL: "DEBUG"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  liveness:
+    path: /actuator/health
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readiness:
+    path: /actuator/health
+    initialDelaySeconds: 15
+    periodSeconds: 5
+
+serviceAccount:
+  create: true
+  name: saga-app
+
+imagePullSecrets: []
+# - name: dockerhub-creds
