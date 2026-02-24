@@ -16,6 +16,9 @@ spec:
         {{- include "saga-service-lib.selectorLabels" . | nindent 8 }}
     spec:
       {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Release.Name }}-app
+      {{- end }}
+      {{- if and (not .Values.serviceAccount.create) .Values.serviceAccount.name }}
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- end }}
       {{- with .Values.imagePullSecrets }}

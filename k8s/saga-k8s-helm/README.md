@@ -10,7 +10,12 @@ Déploiement Kubernetes de **site-service** et **uaa-service** via Helm charts, 
 
 ```text
 k8s/saga-k8s-helm/
-├── saga-service-lib/                    # Library chart — templates réutilisables (Helm 3)
+├── saga-bootstrap/                      # Namespace + ServiceAccount partagée (saga-app)
+│   ├── Chart.yaml
+│   ├── values.yaml
+│   └── templates/
+│       └── serviceaccount.yaml
+├── saga-service-lib/                   # Library chart — templates réutilisables (Helm 3)
 │   ├── Chart.yaml                       # type: library — ne se déploie pas
 │   └── templates/
 │       ├── _helpers.tpl                 # fullname, labels, selectorLabels
@@ -35,7 +40,7 @@ k8s/saga-k8s-helm/
 └── README.md
 ```
 
-**Principe DRY** : la logique commune (Deployment, Service, Ingress, ConfigMap, ServiceAccount) est définie une seule fois dans `saga-service-lib`. Les charts `site-service` et `uaa-service` fournissent uniquement leurs valeurs (`image`, `env`, `ingress.host`, etc.).
+**Principe DRY** : la logique commune (Deployment, Service, Ingress, ConfigMap) est définie dans `saga-service-lib`. La ServiceAccount `saga-app` est créée une fois par `saga-bootstrap` et partagée par les deux services (`serviceAccount.create: false`, `serviceAccount.name: saga-app`). Les `imagePullSecrets` viennent de la SA — **ne pas mettre `serviceAccount.create: true`** sinon le pod utiliserait une SA locale sans credentials.
 
 ---
 
@@ -67,11 +72,18 @@ cd k8s/saga-k8s-helm/uaa-service && helm dependency update && cd -
 
 ## Déploiement rapide (dev)
 
+### 0. Bootstrap (obligatoire — une fois par namespace)
+
+```bash
+helm install saga-bootstrap ./k8s/saga-k8s-helm/saga-bootstrap \
+  -n saga-helm-dev --create-namespace
+```
+
 ### 1. Déployer uaa-service
 
 ```bash
 helm install uaa-service ./k8s/saga-k8s-helm/uaa-service \
-  -n saga-helm-dev --create-namespace \
+  -n saga-helm-dev \
   -f ./k8s/saga-k8s-helm/uaa-service/values-dev.yaml
 ```
 
@@ -79,7 +91,7 @@ helm install uaa-service ./k8s/saga-k8s-helm/uaa-service \
 
 ```bash
 helm install site-service ./k8s/saga-k8s-helm/site-service \
-  -n saga-helm-dev --create-namespace \
+  -n saga-helm-dev \
   -f ./k8s/saga-k8s-helm/site-service/values-dev.yaml
 ```
 
@@ -94,12 +106,15 @@ kubectl get all -n saga-helm-dev
 ## Déploiement prod
 
 ```bash
+helm install saga-bootstrap ./k8s/saga-k8s-helm/saga-bootstrap \
+  -n saga-helm-prod --create-namespace
+
 helm install uaa-service ./k8s/saga-k8s-helm/uaa-service \
-  -n saga-helm-prod --create-namespace \
+  -n saga-helm-prod \
   -f ./k8s/saga-k8s-helm/uaa-service/values-prod.yaml
 
 helm install site-service ./k8s/saga-k8s-helm/site-service \
-  -n saga-helm-prod --create-namespace \
+  -n saga-helm-prod \
   -f ./k8s/saga-k8s-helm/site-service/values-prod.yaml
 ```
 

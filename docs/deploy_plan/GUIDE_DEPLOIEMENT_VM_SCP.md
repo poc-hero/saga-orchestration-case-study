@@ -142,6 +142,7 @@ Deux options :
 ```bash
 # Mac
 scp -r /Users/mac/IdeaProjects/saga-orchestration-case-study/k8s user@<IP_MASTER>:~/
+scp -r /Users/mac/IdeaProjects/saga-orchestration-case-study/k8s user@<IP_MASTER>:~/
 
 # Master (après ssh)
 kubectl apply -k ~/k8s/saga-k8s/overlays/dev/

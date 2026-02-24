@@ -38,9 +38,9 @@ probes:
     initialDelaySeconds: 15
     periodSeconds: 5
 
+# saga-app créée par saga-bootstrap — NE PAS mettre create: true
 serviceAccount:
-  create: true
+  create: false
   name: saga-app
 
-imagePullSecrets: []
-# - name: dockerhub-creds
+imagePullSecrets: []  # hérités de saga-app (ServiceAccount)
