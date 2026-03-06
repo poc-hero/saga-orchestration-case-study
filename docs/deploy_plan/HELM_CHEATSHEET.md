@@ -37,12 +37,7 @@ helm uninstall saga-bootstrap -n saga-helm-dev
 **Images privées** : soit via Helm (saga-bootstrap crée le Secret) :
 ```bash
 # Option A : auth en base64 (echo -n "user:PAT" | base64)
-helm install saga-bootstrap ./k8s/saga-k8s-helm/saga-bootstrap \
-  -n saga-helm-dev --create-namespace \
-  --set dockerhub.enabled=true \
-  --set dockerhub.auth=andr7w \
-  --set dockerhub.username=andr7w \
-  --set dockerhub.password=<PAT>
+
 
 # Option B : username + password
 helm install saga-bootstrap ./k8s/saga-k8s-helm/saga-bootstrap \
