@@ -31,7 +31,7 @@ Tu veux:
 
 **Fonctionnement**
 - Un conteneur sidecar (Vault Agent) est injecte a cote de l'application Spring.
-- Il recupere les secrets et les ecrit dans un fichier local partage (ex: `/vault/secrets/config`).
+- Il recupere les secrets et les ecrit dans un fichier local partage (ex: `/vault/secrets/application.properties`).
 - Aucun code Java specifique Vault requis.
 
 **Gestion dynamique**
@@ -168,7 +168,8 @@ vault write auth/kubernetes/config \
 **1.1 Créer le secret dans Vault**
 
 ```bash
-vault kv put secret/data/app/saga/dev/site-service my-secret="ma-valeur-test"
+# secret = mount, app/saga/dev/site-service = path → API: secret/data/app/saga/dev/site-service
+vault kv put secret/app/saga/dev/site-service my-secret="ma-valeur-test"
 ```
 
 **1.2 Créer une policy Vault**
@@ -185,13 +186,15 @@ path "secret/data/app/saga/dev/site-service" {
 vault policy write site-service-policy policy-site-service.hcl
 ```
 
-**1.3 Créer le rôle Vault**
+**1.3 Rôle Vault**
 
-> Prérequis : Phase 0 terminée (auth `kubernetes` activée et configurée).
+Rôle utilisé : **`app-role`** (selon tes prérequis infra). Le rôle doit autoriser la policy donnant accès au chemin `secret/data/app/saga/<env>/site-service`.
+
+Si le rôle `app-role` n'existe pas encore :
 
 ```bash
-vault write auth/kubernetes/role/site-service-role \
-  bound_service_account_names=app-sa, saga-app \
+vault write auth/kubernetes/role/app-role \
+  bound_service_account_names=saga-app \
   bound_service_account_namespaces=saga-helm-dev \
   policies=site-service-policy \
   ttl=1h
@@ -241,25 +244,24 @@ kubectl get pods -n vault-agent-injector
 
 **3.1 Annoter le Deployment pour l'injection**
 
-Ajouter dans le template Deployment de `site-service` (ou via values) :
+Le `secretPath` est **configuré par environnement** dans les values :
 
-```yaml
-annotations:
-  vault.hashicorp.com/agent-inject: "true"
-  vault.hashicorp.com/role: "site-service-role"
-  vault.hashicorp.com/agent-inject-secret-config: "secret/data/saga/dev/site-service"
-  vault.hashicorp.com/agent-inject-template-config: |
-    {{- with secret "secret/data/saga/dev/site-service" -}}
-    my.secret={{ .Data.data.my-secret }}
-    {{- end }}
-```
+| Fichier | `vault.secretPath` |
+|---------|--------------------|
+| `values.yaml` | `secret/data/app/saga/dev/site-service` (défaut) |
+| `values-dev.yaml` | `secret/data/app/saga/dev/site-service` |
+| `values-staging.yaml` | `secret/data/app/saga/staging/site-service` |
+| `values-prod.yaml` | `secret/data/app/saga/prod/site-service` |
+
+Le template utilise `{{ .Values.vault.secretPath }}` et itère sur toutes les clés du secret (pas de mapping manuel).
 
 **3.2 Format du fichier généré**
 
-L'agent écrit dans `/vault/secrets/config` un fichier properties :
+L'agent écrit dans `/vault/secrets/application.properties` un fichier properties avec **toutes les clés** du secret :
 
 ```properties
-my.secret=ma-valeur-test
+my-secret=ma-valeur-test
+autre-cle=autre-valeur
 ```
 
 **3.3 Configurer Spring pour charger ce fichier**
@@ -267,12 +269,56 @@ my.secret=ma-valeur-test
 Variable d'environnement dans le Deployment :
 
 ```yaml
+{{- if and .Values.vault (eq .Values.vault.enabled true) }}
 env:
   - name: SPRING_CONFIG_ADDITIONAL_LOCATION
     value: "file:/vault/secrets/"
+{{- end }}
 ```
 
-Spring charge alors `config` (ou `config.properties`) depuis `/vault/secrets/`.
+**Explication du bloc Helm**
+
+| Élément | Signification |
+|---------|---------------|
+| `{{- if ... }}` | Condition Helm : n'injecte le bloc que si la condition est vraie |
+| `and .Values.vault ...` | Vérifie que `vault` existe dans les values (évite une erreur si absent) |
+| `eq .Values.vault.enabled true` | Vault doit être explicitement activé |
+| `{{- end }}` | Fin du bloc conditionnel |
+| `SPRING_CONFIG_ADDITIONAL_LOCATION` | Variable Spring Boot : emplacements supplémentaires pour charger la config |
+| `file:/vault/secrets/` | Dossier où l'Agent Vault écrit les fichiers (ex: `application.properties`) |
+
+Résultat : Spring charge `/vault/secrets/application.properties` au démarrage (Spring Boot cherche `application.properties` dans le dossier indiqué), ce qui lui permet de résoudre `${my-secret}` et les autres propriétés injectées par Vault.
+
+**3.4 Interroger le container pour voir les valeurs du secret**
+
+Depuis votre machine, exécutez dans le pod pour inspecter les fichiers écrits par l'Agent Vault :
+
+```bash
+# Récupérer le nom du pod site-service (ajuster le namespace si votre release diffère)
+POD=$(kubectl get pods -n saga-helm-dev -l app=site-service -o jsonpath='{.items[0].metadata.name}')
+
+# Lister les fichiers dans /vault/secrets/
+kubectl exec -n saga-helm-dev $POD -c app -- ls -la /vault/secrets/
+
+# Lire le contenu du fichier application.properties (clés/valeurs injectées par Vault)
+kubectl exec -n saga-helm-dev $POD -c app -- cat /vault/secrets/application.properties
+```
+
+Exemple de sortie :
+
+```
+my-secret=ma-valeur-test
+autre-cle=autre-valeur
+```
+
+> **Attention** : le nom du conteneur principal est `app` ; le sidecar Vault Agent s'appelle `vault-agent`. Pour exécuter dans le sidecar : `-c vault-agent`.
+
+Alternative via l'endpoint applicatif (sans exec) :
+
+```bash
+# Via port-forward ou ingress
+curl http://<site-service-url>/api/site/secret-check
+```
 
 ---
 
@@ -328,7 +374,7 @@ Pour ton besoin actuel, **Option 1 (rollout restart)** est la plus simple et fia
 
 - [ ] Vault Agent Injector déployé et fonctionnel
 - [ ] Pod `site-service` démarre avec le sidecar
-- [ ] Fichier `/vault/secrets/config` présent dans le pod
+- [ ] Fichier `/vault/secrets/application.properties` présent dans le pod
 - [ ] Endpoint `/api/site/secret-check` retourne / logge la valeur
 - [ ] Après modification Vault + `kubectl rollout restart`, nouvelle valeur visible
 

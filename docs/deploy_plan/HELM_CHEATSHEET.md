@@ -80,6 +80,10 @@ helm install site-service ./k8s/saga-k8s-helm/site-service \
 helm upgrade site-service ./k8s/saga-k8s-helm/site-service \
   -n saga-helm-dev \
   -f ./k8s/saga-k8s-helm/site-service/values-dev.yaml
+  
+helm upgrade uaa-service ./k8s/saga-k8s-helm/uaa-service \
+  -n saga-helm-dev \
+  -f ./k8s/saga-k8s-helm/uaa-service/values-dev.yaml
 
 # Désinstaller (ordre inverse : services puis bootstrap)
 helm uninstall site-service -n saga-helm-dev

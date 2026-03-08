@@ -13,4 +13,4 @@ site:
 # En local : valeur par défaut vide ou via -Dapp.secrets.my-secret=xxx
 app:
   secrets:
-    my-secret: ${my.secret:}
+    my-secret: ${my-secret:}

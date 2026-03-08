@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  tag: latest
+  tag: 1.0.0
 
 env:
   SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
@@ -9,3 +9,7 @@ env:
 
 ingress:
   host: site-service.saga-k8s.local
+
+# Chemin Vault par environnement
+vault:
+  secretPath: secret/data/app/saga/dev/site-service

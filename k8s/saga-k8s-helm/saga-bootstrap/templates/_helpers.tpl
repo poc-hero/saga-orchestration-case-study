@@ -1,6 +1,9 @@
 {{- define "saga-bootstrap.dockerconfigjson" -}}
 {{- $auth := .Values.dockerhub.auth -}}
-{{- if not $auth -}}
+{{- if and .Values.dockerhub.username .Values.dockerhub.password -}}
+{{- /* Priorité : username+password → auth calculé (évite l'erreur "must be formatted as base64") */ -}}
+{{- $auth = printf "%s:%s" .Values.dockerhub.username .Values.dockerhub.password | b64enc -}}
+{{- else if not $auth -}}
 {{- $auth = printf "%s:%s" .Values.dockerhub.username .Values.dockerhub.password | b64enc -}}
 {{- end -}}
 {{- $authData := dict "auth" $auth -}}

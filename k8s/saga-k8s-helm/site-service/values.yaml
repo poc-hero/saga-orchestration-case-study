@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: andr7w/saga-orchestration-site-service
-  tag: latest
+  tag: "1.0.0"
   pullPolicy: IfNotPresent
 
 service:
@@ -11,9 +11,9 @@ service:
 
 ingress:
   enabled: true
+  className: "traefik"  # "nginx" ou "traefik" selon le contrôleur installé
   host: site-service.saga-k8s.local
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+  annotations: {}
 
 env:
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0"
@@ -44,3 +44,10 @@ serviceAccount:
   name: saga-app
 
 imagePullSecrets: []  # hérités de saga-app (ServiceAccount)
+
+# Vault Agent Injector (Phase 3 — Option A)
+# secretPath dépend de l'environnement — surchargé dans values-dev.yaml / values-prod.yaml
+vault:
+  enabled: true
+  role: app-role
+  secretPath: secret/data/app/saga/dev/site-service  # défaut dev

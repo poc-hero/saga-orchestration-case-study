@@ -10,6 +10,10 @@ env:
 ingress:
   host: site-service.saga.example.com
 
+# Chemin Vault par environnement
+vault:
+  secretPath: secret/data/app/saga/prod/site-service
+
 resources:
   requests:
     cpu: 250m

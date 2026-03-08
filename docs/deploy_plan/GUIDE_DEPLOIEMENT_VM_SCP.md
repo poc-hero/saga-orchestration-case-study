@@ -61,7 +61,7 @@ sudo k3s kubectl get nodes
 Depuis ta machine de développement (Mac) :
 
 ```bash
-scp -r /Users/mac/IdeaProjects/saga-orchestration-case-study/k8s user@<IP_MASTER>:~/
+scp -r /Users/mac/IdeaProjects/saga-orchestration-case-study/k8s user@<APP_MASTER_IP>:~/
 ```
 
 **Exemple :**
