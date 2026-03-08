@@ -168,7 +168,7 @@ vault write auth/kubernetes/config \
 **1.1 Créer le secret dans Vault**
 
 ```bash
-vault kv put secret/saga/dev/site-service my-secret="ma-valeur-test"
+vault kv put secret/data/app/saga/dev/site-service my-secret="ma-valeur-test"
 ```
 
 **1.2 Créer une policy Vault**
@@ -176,7 +176,7 @@ vault kv put secret/saga/dev/site-service my-secret="ma-valeur-test"
 Fichier `policy-site-service.hcl` :
 
 ```hcl
-path "secret/data/saga/dev/site-service" {
+path "secret/data/app/saga/dev/site-service" {
   capabilities = ["read"]
 }
 ```
@@ -191,7 +191,7 @@ vault policy write site-service-policy policy-site-service.hcl
 
 ```bash
 vault write auth/kubernetes/role/site-service-role \
-  bound_service_account_names=saga-app \
+  bound_service_account_names=app-sa, saga-app \
   bound_service_account_namespaces=saga-helm-dev \
   policies=site-service-policy \
   ttl=1h
@@ -204,11 +204,24 @@ vault write auth/kubernetes/role/site-service-role \
 **2.1 Installer le Vault Helm chart (Agent Injector)**
 
 ```bash
+# Créer le dossier et copier la config
+mkdir -p ~/.kube
+sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+sudo chown $(id -u):$(id -g) ~/.kube/config
+chmod 600 ~/.kube/config
+
+# Utiliser cette config
+export KUBECONFIG=~/.kube/config
+
+# Vérifier
+kubectl get nodes
+
+
 helm repo add hashicorp https://helm.releases.hashicorp.com
 helm repo update
 
 helm install vault-agent-injector hashicorp/vault \
-  --set "injector.externalVaultAddr=https://<VAULT_URL>" \
+  --set "injector.externalVaultAddr=http://84.234.25.73:30200" \
   -n vault-agent-injector --create-namespace
 ```
 
@@ -223,6 +236,8 @@ kubectl get pods -n vault-agent-injector
 ---
 
 ### Phase 3 : Helm chart site-service — annotations d'injection
+
+**Implémenté** dans `k8s/saga-k8s-helm`. Le library chart `saga-service-lib` gère l'injection de façon conditionnelle (`vault.enabled`). Seul `site-service` active Vault.
 
 **3.1 Annoter le Deployment pour l'injection**
 

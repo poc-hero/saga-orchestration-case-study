@@ -1,7 +1,7 @@
 # Test: valeur fictive pour app.secrets.my-secret (Vault non utilisé en test)
 app:
   secrets:
-    my-secret: "test-secret-value"
+    my-secret: ""
 
 # Logs des étapes Saga visibles pendant les tests d'intégration
 logging:
