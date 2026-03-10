@@ -4,12 +4,14 @@ image:
   tag: 1.0.0
 
 env:
+  SPRING_PROFILES_ACTIVE: "dev"
+  VAULT_ADDR: "http://84.234.25.73:30200"  # adapter selon ton Vault dev
   SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
   LOG_LEVEL: "DEBUG"
 
 ingress:
   host: site-service.saga-k8s.local
 
-# Chemin Vault par environnement
+# Option B : pas de sidecar
 vault:
-  secretPath: secret/data/app/saga/dev/site-service
+  enabled: false

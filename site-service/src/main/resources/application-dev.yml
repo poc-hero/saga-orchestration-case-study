@@ -1,0 +1,16 @@
+# Option B — Spring Cloud Vault (actif uniquement quand SPRING_PROFILES_ACTIVE=dev)
+# Prérequis : auth kubernetes + rôle app-role + secret dans Vault
+spring:
+  config:
+    import: optional:vault://
+  cloud:
+    vault:
+      uri: ${VAULT_ADDR:http://127.0.0.1:8200}
+      authentication: KUBERNETES
+      kubernetes:
+        role: app-role
+        service-account-token-file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      kv:
+        enabled: true
+        backend: secret
+        default-context: app/saga/dev/site-service

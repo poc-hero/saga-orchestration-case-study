@@ -45,9 +45,7 @@ serviceAccount:
 
 imagePullSecrets: []  # hérités de saga-app (ServiceAccount)
 
-# Vault Agent Injector (Phase 3 — Option A)
-# secretPath dépend de l'environnement — surchargé dans values-dev.yaml / values-prod.yaml
+# Option B : Spring Cloud Vault (native) — pas de sidecar
+# vault.enabled: false désactive les annotations Vault Agent Injector (Option A)
 vault:
-  enabled: true
-  role: app-role
-  secretPath: secret/data/app/saga/dev/site-service  # défaut dev
+  enabled: false

@@ -4,15 +4,17 @@ image:
   tag: "1.0.0"
 
 env:
+  SPRING_PROFILES_ACTIVE: "prod"
+  VAULT_ADDR: "https://vault.prod.example.com"  # adapter selon ton Vault prod
   SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
   LOG_LEVEL: "INFO"
 
 ingress:
   host: site-service.saga.example.com
 
-# Chemin Vault par environnement
+# Option B : pas de sidecar
 vault:
-  secretPath: secret/data/app/saga/prod/site-service
+  enabled: false
 
 resources:
   requests:

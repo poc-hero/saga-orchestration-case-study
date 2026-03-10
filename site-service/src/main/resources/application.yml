@@ -9,8 +9,8 @@ site:
     uaa:
       url: http://localhost:8080
 
-# Secret fourni par Vault Agent Injector (Phase 4 - Option A)
-# En local : valeur par défaut vide ou via -Dapp.secrets.my-secret=xxx
+# Secret fourni par Vault (Option A : sidecar / Option B : Spring Cloud Vault)
+# En local sans Vault : valeur par défaut vide ou -Dapp.secrets.my-secret=xxx
 app:
   secrets:
     my-secret: ${my-secret:}

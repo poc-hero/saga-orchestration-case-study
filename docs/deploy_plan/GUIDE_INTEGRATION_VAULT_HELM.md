@@ -387,3 +387,333 @@ Pour ton besoin actuel, **Option 1 (rollout restart)** est la plus simple et fia
 3. Phase 3 : Ajouter les annotations au chart Helm `site-service`
 4. Phase 4 : Endpoint + property dans l'app
 5. Phase 5–6 : Tester le refresh et valider
+
+---
+---
+
+## Implémentation Option B : Spring Cloud Vault (native app) — étapes détaillées
+
+L'application Spring Boot se connecte **directement** à Vault au démarrage via la librairie `spring-cloud-starter-vault-config`. Pas de sidecar, pas d'annotation Kubernetes : la résolution des secrets est gérée nativement par Spring.
+
+---
+
+### Comparaison rapide avec Option A
+
+| Critère | Option A (sidecar) | Option B (Spring Cloud Vault) |
+|---------|-------------------|-------------------------------|
+| Conteneurs par pod | 2 (app + vault-agent) | 1 (app seule) |
+| Dépendance Java Vault | Aucune | `spring-cloud-starter-vault-config` |
+| Refresh à chaud | Non (rollout restart) | Oui (`/actuator/refresh`) |
+| Transit Engine | Non | Oui |
+| Secrets dynamiques (DB, etc.) | Non | Oui |
+| Portabilité hors K8s | Non | Oui (VM, bare metal, local) |
+| Complexité infra | Injector + webhook + annotations | Config dans `application.yml` |
+| Complexité app | Aucune | Dépendance + config Spring |
+
+---
+
+### Phase 0 : Prérequis Vault
+
+Identiques à l'Option A :
+- Vault accessible depuis le cluster (ou depuis la machine en local)
+- Auth `kubernetes` activée (si K8s) — voir [Phase 0 Option A](#phase-0--prérequis-vault)
+- Secret, policy et rôle créés — voir [Phase 1 Option A](#phase-1--vault--secret-policy-et-rôle)
+
+> **Différence** : l'Option B peut aussi utiliser d'autres méthodes d'auth (AppRole, Token, etc.), pas uniquement Kubernetes.
+
+---
+
+### Phase 1 : Dépendances Maven
+
+**1.1 Ajouter le BOM Spring Cloud dans le POM parent**
+
+Fichier : `pom.xml` (racine)
+
+```xml
+<properties>
+    <java.version>21</java.version>
+    <spring-cloud.version>2023.0.4</spring-cloud.version>
+</properties>
+
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-dependencies</artifactId>
+            <version>${spring-cloud.version}</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+**1.2 Ajouter le starter dans `site-service/pom.xml`**
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-vault-config</artifactId>
+</dependency>
+```
+
+> La version est gérée par le BOM. Pas besoin de la spécifier.
+
+---
+
+### Phase 2 : Configuration `application.yml`
+
+Fichier : `site-service/src/main/resources/application.yml`
+
+**2.1 Import Vault via ConfigData API (Spring Boot 3.x)**
+
+```yaml
+spring:
+  application:
+    name: site-service
+  config:
+    import: optional:vault://
+
+  cloud:
+    vault:
+      uri: ${VAULT_ADDR:http://127.0.0.1:8200}
+      authentication: KUBERNETES
+      kubernetes:
+        role: app-role
+        service-account-token-file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      kv:
+        enabled: true
+        backend: secret
+        default-context: app/saga/dev/site-service
+        # profile-separator: /  # si tu veux des chemins par profil Spring
+
+app:
+  secrets:
+    my-secret: ${my-secret:}
+```
+
+**Explication des clés :**
+
+| Clé | Rôle |
+|-----|------|
+| `spring.config.import: optional:vault://` | Active l'import Vault via ConfigData. `optional:` = pas d'erreur si Vault est absent (utile en local) |
+| `spring.cloud.vault.uri` | URL du serveur Vault. Variable d'env `VAULT_ADDR` par défaut |
+| `spring.cloud.vault.authentication` | Méthode d'auth : `KUBERNETES`, `APPROLE`, `TOKEN` |
+| `spring.cloud.vault.kubernetes.role` | Rôle Vault (même `app-role` que l'Option A) |
+| `spring.cloud.vault.kubernetes.service-account-token-file` | Chemin du JWT du pod (monté automatiquement par K8s) |
+| `spring.cloud.vault.kv.backend` | Mount point du KV engine (ici `secret`) |
+| `spring.cloud.vault.kv.default-context` | Chemin du secret **sans le préfixe** `data/` (Spring Cloud Vault le gère) |
+| `${my-secret:}` | Résolu depuis Vault au démarrage ; vide si absent |
+
+**2.2 Profils par environnement**
+
+Créer `application-dev.yml` et `application-prod.yml` pour surcharger le chemin Vault :
+
+`application-dev.yml` :
+
+```yaml
+spring:
+  cloud:
+    vault:
+      uri: http://84.234.25.73:30200
+      kv:
+        default-context: app/saga/dev/site-service
+```
+
+`application-prod.yml` :
+
+```yaml
+spring:
+  cloud:
+    vault:
+      uri: https://vault.prod.example.com
+      kv:
+        default-context: app/saga/prod/site-service
+```
+
+---
+
+### Phase 3 : Helm — variables d'environnement (pas d'annotations sidecar)
+
+L'Option B ne nécessite **aucune annotation Vault** sur le Deployment. Il faut uniquement passer l'URL Vault et le profil Spring en variable d'environnement.
+
+**3.1 Values Helm**
+
+`values-dev.yaml` :
+
+```yaml
+env:
+  SPRING_PROFILES_ACTIVE: "dev"
+  VAULT_ADDR: "http://84.234.25.73:30200"
+  SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
+  LOG_LEVEL: "DEBUG"
+
+vault:
+  enabled: false  # pas de sidecar — Spring Cloud Vault gère tout
+```
+
+`values-prod.yaml` :
+
+```yaml
+env:
+  SPRING_PROFILES_ACTIVE: "prod"
+  VAULT_ADDR: "https://vault.prod.example.com"
+  SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
+  LOG_LEVEL: "INFO"
+
+vault:
+  enabled: false
+```
+
+**3.2 Résultat sur le Deployment**
+
+Avec `vault.enabled: false`, le template library ne génère :
+- **Aucune annotation** Vault (pas de sidecar injecté)
+- **Aucune variable** `SPRING_CONFIG_ADDITIONAL_LOCATION`
+
+L'app se connecte elle-même à Vault via `VAULT_ADDR`.
+
+---
+
+### Phase 4 : Endpoint `/api/site/secret-check`
+
+Aucune modification du contrôleur. Le code existant fonctionne tel quel :
+
+```java
+@Value("${app.secrets.my-secret:}") String mySecret
+```
+
+Spring résout `${my-secret}` depuis la PropertySource Vault au démarrage, puis l'injecte dans `app.secrets.my-secret`.
+
+---
+
+### Phase 5 : Refresh à chaud (avantage de l'Option B)
+
+**5.1 Activer le refresh**
+
+Annoter les beans qui lisent les secrets avec `@RefreshScope` :
+
+```java
+@RestController
+@RequestMapping("/api/site")
+@RefreshScope
+public class SiteController {
+    @Value("${app.secrets.my-secret:}") String mySecret;
+    // ...
+}
+```
+
+**5.2 Déclencher le refresh**
+
+Après modification du secret dans Vault :
+
+```bash
+# Modifier le secret
+vault kv put secret/app/saga/dev/site-service my-secret="nouvelle-valeur"
+
+# Recharger sans redémarrer le pod
+curl -X POST http://site-service.saga-k8s.local/actuator/refresh
+```
+
+L'app relit les secrets depuis Vault et met à jour les `@Value`.
+
+> **Prérequis** : exposer l'endpoint `/actuator/refresh` via `management.endpoints.web.exposure.include=refresh` dans `application.yml`.
+
+---
+
+### Phase 6 : Fonctionnalités avancées (Transit, secrets dynamiques)
+
+**6.1 Transit Engine (chiffrement/déchiffrement)**
+
+Spring Cloud Vault donne accès au Transit Engine pour chiffrer/déchiffrer des données sans exposer la clé :
+
+```java
+@Autowired
+VaultOperations vaultOperations;
+
+String ciphertext = vaultOperations.opsForTransit().encrypt("my-key", "données sensibles");
+String plaintext  = vaultOperations.opsForTransit().decrypt("my-key", ciphertext);
+```
+
+> Nécessite la dépendance `spring-vault-core` (incluse dans le starter).
+
+**6.2 Secrets dynamiques (ex. credentials DB temporaires)**
+
+```yaml
+spring:
+  cloud:
+    vault:
+      database:
+        enabled: true
+        role: site-service-db
+        backend: database
+```
+
+Vault génère des credentials DB temporaires, Spring les injecte dans `spring.datasource.username` et `spring.datasource.password`. Renouvellement automatique avant expiration du lease.
+
+---
+
+### Phase 7 : Tests locaux (sans Kubernetes)
+
+Un des avantages de l'Option B : tout fonctionne en local.
+
+**7.1 Avec un Vault local (Docker)**
+
+```bash
+docker run -d --name vault -p 8200:8200 \
+  -e VAULT_DEV_ROOT_TOKEN_ID=root \
+  hashicorp/vault:1.15
+
+export VAULT_ADDR=http://127.0.0.1:8200
+export VAULT_TOKEN=root
+
+vault kv put secret/app/saga/dev/site-service my-secret="valeur-locale"
+```
+
+`application.yml` utilise `optional:vault://` : si Vault est absent, l'app démarre avec les valeurs par défaut.
+
+**7.2 Sans Vault (fallback)**
+
+```bash
+# Juste lancer l'app — ${my-secret:} se résout en chaîne vide
+mvn spring-boot:run -pl site-service
+```
+
+---
+
+### Phase 8 : Validation
+
+- [ ] Dépendance `spring-cloud-starter-vault-config` ajoutée
+- [ ] `spring.config.import: optional:vault://` dans `application.yml`
+- [ ] Auth Kubernetes configurée (`role`, `service-account-token-file`)
+- [ ] Pod démarre avec **1 seul conteneur** (pas de sidecar)
+- [ ] Endpoint `/api/site/secret-check` retourne la valeur du secret
+- [ ] Refresh à chaud : `POST /actuator/refresh` recharge le secret sans restart
+
+---
+
+### Ordre d'exécution recommandé (Option B)
+
+1. Phase 0 : Vault (secret, policy, rôle) — réutiliser ceux de l'Option A
+2. Phase 1 : Ajouter les dépendances Maven
+3. Phase 2 : Configurer `application.yml` + profils
+4. Phase 3 : Mettre à jour les values Helm (`vault.enabled: false`, `VAULT_ADDR`)
+5. Phase 4 : Vérifier l'endpoint
+6. Phase 5 : Tester le refresh à chaud
+7. Phase 6 : (Optionnel) Transit, secrets dynamiques
+8. Phase 7–8 : Tests locaux et validation
+
+---
+
+### Migration Option A → Option B
+
+Si tu veux passer de A à B :
+
+1. Ajouter les dépendances Maven (Phase 1)
+2. Modifier `application.yml` (Phase 2)
+3. Dans les values Helm : `vault.enabled: false` (supprime le sidecar)
+4. Retirer `SPRING_CONFIG_ADDITIONAL_LOCATION` (automatique avec `vault.enabled: false`)
+5. `helm upgrade` + vérifier que le pod a **1 conteneur**
+6. Tester `/api/site/secret-check`
+
+Le secret, la policy et le rôle Vault restent les mêmes.
