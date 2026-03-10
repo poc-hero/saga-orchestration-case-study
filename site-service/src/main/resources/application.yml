@@ -4,6 +4,16 @@ spring:
   application:
     name: site-service
 
+# Phase 5 Option 3 — Actuator refresh pour recharger les secrets sans restart
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,refresh
+  endpoint:
+    refresh:
+      enabled: true
+
 site:
   services:
     uaa:

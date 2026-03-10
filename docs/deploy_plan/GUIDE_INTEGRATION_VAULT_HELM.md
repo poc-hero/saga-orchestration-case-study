@@ -362,11 +362,22 @@ kubectl rollout restart deployment/site-service -n saga-helm-dev
 
 L'agent peut être configuré pour envoyer SIGHUP à l'app après renouvellement. Nécessite une config agent avancée.
 
-**Option 3 — Endpoint `/actuator/refresh`**
+**Option 3 — Endpoint `/actuator/refresh`** (implémenté pour Option B)
 
-Si Spring Cloud Config refresh est activé, un appel à `/actuator/refresh` peut recharger les properties (selon config).
+- `@RefreshScope` sur `SiteController` : le bean est recréé au prochain accès après un refresh
+- `management.endpoints.web.exposure.include: health,refresh` : endpoint exposé
+- `POST /actuator/refresh` déclenche `ContextRefresher.refresh()` → les beans `@RefreshScope` rechargent leurs `@Value`
 
-Pour ton besoin actuel, **Option 1 (rollout restart)** est la plus simple et fiable.
+```bash
+# Après modification du secret dans Vault
+curl -X POST http://site-service.saga-k8s.local/actuator/refresh
+
+# Puis vérifier
+curl http://site-service.saga-k8s.local/api/site/secret-check
+```
+
+> **Option A (sidecar)** : le refresh ne recharge pas le fichier `/vault/secrets/application.properties`. Il faut redémarrer le pod.
+> **Option B (Spring Cloud Vault)** : le refresh recharge les PropertySources Vault si `ContextRefresher` est appelé.
 
 ---
 
