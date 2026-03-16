@@ -42,7 +42,7 @@ helm install saga-bootstrap ./k8s/saga-k8s-helm/saga-bootstrap \
   --set dockerhub.enabled=true \
   --set dockerhub.auth=andr7w \
   --set dockerhub.username=andr7w \
-  --set dockerhub.password=<PAT>
+  --set dockerhub.password=
 
 # Option B : username + password
 helm install saga-bootstrap ./k8s/saga-k8s-helm/saga-bootstrap \
