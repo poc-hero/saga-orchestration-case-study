@@ -13,3 +13,4 @@ spring:
         enabled: true
         backend: secret
         default-context: app/saga/staging/site-service
+        application-name: app/saga/staging/site-service

@@ -1,0 +1,12 @@
+# Profil activé via SPRING_PROFILES_ACTIVE (ex: "dev,mongo")
+spring:
+  autoconfigure:
+    exclude: []
+  data:
+    mongodb:
+      uri: ${mongodb-uri}
+
+management:
+  health:
+    mongo:
+      enabled: true

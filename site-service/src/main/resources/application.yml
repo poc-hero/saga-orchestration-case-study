@@ -3,6 +3,10 @@ server:
 spring:
   application:
     name: site-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.mongo.MongoReactiveAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoReactiveDataAutoConfiguration
 
 # Phase 5 Option 3 — Actuator refresh pour recharger les secrets sans restart
 management:

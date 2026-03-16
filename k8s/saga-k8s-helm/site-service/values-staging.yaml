@@ -4,7 +4,7 @@ image:
   tag: "1.0.0"
 
 env:
-  SPRING_PROFILES_ACTIVE: "staging"
+  SPRING_PROFILES_ACTIVE: "staging,mongo"
   VAULT_ADDR: "https://vault.staging.example.com"
   SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
   LOG_LEVEL: "INFO"
