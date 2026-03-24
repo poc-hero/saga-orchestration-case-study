@@ -1,0 +1,4 @@
+# Config applicative uaa-service (dev)
+spring:
+  application:
+    name: uaa-service

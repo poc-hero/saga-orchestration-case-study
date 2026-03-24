@@ -1,0 +1,68 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: saga
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - merge:
+        mergeKeys:
+          - name
+        generators:
+          - matrix:
+              generators:
+                - git:
+                    repoURL: https://github.com/poc-hero/saga-orchestration-case-study.git
+                    revision: HEAD
+                    files:
+                      - path: saga-delivery/serviceCatalog.yaml
+                - list:
+                    elementsYaml: "{{ .services | toJson }}"
+          - matrix:
+              generators:
+                - git:
+                    repoURL: https://github.com/poc-hero/saga-orchestration-case-study.git
+                    revision: HEAD
+                    files:
+                      - path: saga-delivery/versions/saga-*.yaml
+                - list:
+                    elementsYaml: |
+                      {{- $env := .env -}}
+                      {{- $items := list -}}
+                      {{- range .services }}
+                      {{- $items = append $items (merge . (dict "env" $env)) -}}
+                      {{- end }}
+                      {{ $items | toJson }}
+  template:
+    metadata:
+      name: "{{ .name }}-{{ .env }}"
+    spec:
+      project: default
+      source:
+        repoURL: "{{ printf \"https://github.com/poc-hero/%s.git\" .repoName }}"
+        targetRevision: HEAD
+        path: "{{ .chartPath }}"
+        helm:
+          valueFiles:
+            - values.yaml
+            - envs/{{ .env }}/values.yaml
+          parameters:
+            - name: deploymentEnv
+              value: "{{ .env }}"
+            - name: saga-shared-config.deploymentEnv
+              value: "{{ .env }}"
+            - name: image.tag
+              value: "{{ .imageTag }}"
+            - name: replicaCount
+              value: "{{ .replicas }}"
+            - name: ingress.host
+              value: "{{ .ingressHost }}"
+      destination:
+        name: "{{ .cluster }}"
+        namespace: "{{ .namespace }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

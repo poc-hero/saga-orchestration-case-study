@@ -212,7 +212,7 @@ Le développeur édite **ce seul fichier** pour mettre à jour les versions de l
 
 _Note_ : `chartRevision` peut être ajouté dans `versions/saga-<env>.yaml`, mais ce n’est **pas** un champ interprété automatiquement par Argo CD dans ce modèle. Il devient utile seulement si l’ApplicationSet le mappe explicitement, par exemple vers `source.targetRevision` dans un scénario où le chart Helm est versionné séparément ou externalisé.
 
-_Note_ : `repoName` suffit ici, car l’ApplicationSet reconstruit le `repoURL` à partir d’une convention commune, par exemple `https://github.com/<org>/<repoName>.git`.
+_Note_ : `repoName` suffit ici, car l’ApplicationSet reconstruit le `repoURL` à partir d’une convention commune, par exemple `https://github.com/poc-hero/<repoName>.git`.
 
 ### 1.1h ApplicationSet — lecture du catalogue + fusion avec les versions
 
@@ -236,7 +236,7 @@ spec:
           - matrix:
               generators:
                 - git:
-                    repoURL: https://github.com/<org>/saga-orchestration-case-study.git
+                    repoURL: https://github.com/poc-hero/saga-orchestration-case-study.git
                     revision: HEAD
                     files:
                       - path: "serviceCatalog.yaml"
@@ -245,7 +245,7 @@ spec:
           - matrix:
               generators:
                 - git:
-                    repoURL: https://github.com/<org>/saga-orchestration-case-study.git
+                    repoURL: https://github.com/poc-hero/saga-orchestration-case-study.git
                     revision: HEAD
                     files:
                       - path: "versions/saga-dev.yaml"
@@ -256,7 +256,7 @@ spec:
       name: "{{ .name }}-{{ .env }}"
     spec:
       source:
-        repoURL: "{{ printf \"https://github.com/<org>/%s.git\" .repoName }}"
+        repoURL: "{{ printf \"https://github.com/poc-hero/%s.git\" .repoName }}"
         path: "{{ .chartPath }}"
         helm:
           valueFiles:
@@ -273,12 +273,12 @@ spec:
 
 Dans cet exemple, l’`ApplicationSet` lit réellement le catalogue via un `git` generator, transforme sa liste `services` en éléments avec `list.elementsYaml`, fait la même chose pour le fichier de version, puis fusionne les deux par `name`.
 
-Le résultat final par service contient donc :
+Le résultat final par service (après fusion par `name`) contient donc :
 
 - depuis `serviceCatalog.yaml` : `repoName`, `chartPath`
-- depuis `versions/saga-dev.yaml` : `env`, `imageTag`, `replicas`, `chartRevision` éventuel
+- depuis `versions/saga-*.yaml` : `env`, `imageTag`, `replicas`, et par service **`cluster`** (nom du cluster enregistré dans Argo CD), **`namespace`** (NS Kubernetes cible), **`ingressHost`** (paramètre Helm `ingress.host`)
 
-Le `repoURL` n’est pas stocké dans les fichiers d’environnement. Il est reconstruit dans le template à partir de `repoName`.
+Le `repoURL` n’est pas stocké dans les fichiers d’environnement. Il est reconstruit dans le template à partir de `repoName`. Le `destination` de l’`Application` utilise `{{ .cluster }}` et `{{ .namespace }}` pour éviter que dev et prod ciblent le même namespace par défaut.
 
 Point clé : l’`ApplicationSet` ne sélectionne pas les fichiers de config partagée. Il transmet uniquement l’environnement (`env`) et les valeurs du service à Helm. Le chargement automatique des profils techniques se fait dans `charts/saga-shared-config/templates/configmap.yaml`.
 
@@ -343,7 +343,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/<org>/saga-orchestration-case-study.git
+    repoURL: https://github.com/poc-hero/saga-orchestration-case-study.git
     targetRevision: HEAD
     path: saga-delivery/argocd
   destination:

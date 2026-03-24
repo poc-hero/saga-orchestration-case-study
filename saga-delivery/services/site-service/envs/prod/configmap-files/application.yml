@@ -1,0 +1,4 @@
+# Config applicative site-service (prod)
+spring:
+  application:
+    name: site-service

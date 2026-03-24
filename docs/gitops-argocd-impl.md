@@ -83,7 +83,7 @@ export ANSIBLE_REPO_ROOT="$HOME/Documents/projet/infomaniak/infra-openstack/ansi
 export ARGOCD_CONTEXT="cluster-argocd-context"
 export TARGET_CONTEXT="cluster-target-context"
 export ARGOCD_NAMESPACE="argocd"
-export GITOPS_REPO_URL="https://github.com/<org>/saga-orchestration-case-study.git"
+export GITOPS_REPO_URL="https://github.com/poc-hero/saga-orchestration-case-study.git"
 ```
 
 ### Convention de separation des repos
@@ -200,7 +200,7 @@ saga-delivery/
 ### Commentaires importants
 
 - `serviceCatalog.yaml` contient les metadonnees stables : `name`, `repoName`, `chartPath`
-- `versions/saga-<env>.yaml` contient les variations d'environnement : `imageTag`, `replicas`
+- `versions/saga-<env>.yaml` contient les variations d'environnement : `imageTag`, `replicas`, et par service : `cluster` (destination Argo CD), `namespace`, `ingressHost`
 - `saga-shared-config` est un **subchart Helm**, pas un simple dossier flottant
 - `resources.yaml` du service ne sert qu'a inclure les ressources du `library chart`
 
@@ -360,13 +360,30 @@ Important :
 
 ### 3.4 Values d'environnement
 
+Priorite des valeurs : `values.yaml` (defauts du chart) puis `envs/<env>/values.yaml` (surcharge), puis parametres Helm passes par Argo CD (`image.tag`, `replicaCount`, `ingress.host`, etc.). Les `replicas` et tags d'image restent la source de verite dans `versions/` ; les fichiers `envs/` portent surtout `env` (Spring, logs) et des surcharges comme `resources` (dev plus leger, prod plus eleve).
+
 Exemple `saga-delivery/services/site-service/envs/dev/values.yaml` :
 
 ```yaml
-deploymentEnv: dev
 env:
   SPRING_PROFILES_ACTIVE: "dev,mongo,datadog"
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0"
+  SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
+  LOG_LEVEL: "DEBUG"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+```
+
+`deploymentEnv` et `saga-shared-config.deploymentEnv` ne sont pas dupliques ici : l'`ApplicationSet` les injecte via des parametres Helm (`{{ .env }}`). Pour un `helm template` local sur ce chart, passer explicitement :
+
+```bash
+--set deploymentEnv=dev --set saga-shared-config.deploymentEnv=dev
 ```
 
 ### 3.5 Commandes de validation locale
@@ -376,7 +393,8 @@ env:
 cd "$REPO_ROOT/saga-delivery/services/site-service"
 helm dependency update
 helm lint .
-helm template site-service . -f values.yaml -f envs/dev/values.yaml
+helm template site-service . -f values.yaml -f envs/dev/values.yaml \
+  --set deploymentEnv=dev --set saga-shared-config.deploymentEnv=dev
 ```
 
 ```bash
@@ -384,7 +402,8 @@ helm template site-service . -f values.yaml -f envs/dev/values.yaml
 cd "$REPO_ROOT/saga-delivery/services/uaa-service"
 helm dependency update
 helm lint .
-helm template uaa-service . -f values.yaml -f envs/dev/values.yaml
+helm template uaa-service . -f values.yaml -f envs/dev/values.yaml \
+  --set deploymentEnv=dev --set saga-shared-config.deploymentEnv=dev
 ```
 
 ### Resultat attendu
@@ -430,6 +449,8 @@ services:
 
 ### 4.2 `versions/saga-dev.yaml`
 
+Chaque service declare aussi **ou** il deploye (cluster Argo CD enregistre, namespace K8s) et **quel host** Ingress utiliser. Cela evite le conflit dev/prod sur le meme namespace.
+
 Exemple :
 
 ```yaml
@@ -438,14 +459,26 @@ services:
   - name: site-service
     imageTag: "3.0.1.mongo"
     replicas: "1"
+    cluster: cluster-target
+    namespace: site-service-dev
+    ingressHost: site-service.dev.saga-k8s.local
   - name: uaa-service
     imageTag: "1.0.0"
     replicas: "1"
+    cluster: cluster-target
+    namespace: uaa-service-dev
+    ingressHost: uaa-service.dev.saga-k8s.local
 ```
+
+| Champ | Role |
+|--------|------|
+| `cluster` | `spec.destination.name` de l'Application — doit correspondre a un cluster enregistre dans Argo CD (`argocd cluster add ... --name ...`) |
+| `namespace` | Namespace Kubernetes cible (distinct par env si besoin) |
+| `ingressHost` | Passe en parametre Helm `ingress.host` pour le chart service |
 
 ### 4.3 `versions/saga-prod.yaml`
 
-Exemple :
+Meme structure ; tu peux utiliser un **autre** `cluster` pour la prod (ex. `cluster-target-prod`) si l'infra le prevoit.
 
 ```yaml
 env: prod
@@ -453,9 +486,15 @@ services:
   - name: site-service
     imageTag: "3.0.5"
     replicas: "2"
+    cluster: cluster-target
+    namespace: site-service-prod
+    ingressHost: site-service.prod.saga-k8s.local
   - name: uaa-service
     imageTag: "1.0.3"
     replicas: "2"
+    cluster: cluster-target
+    namespace: uaa-service-prod
+    ingressHost: uaa-service.prod.saga-k8s.local
 ```
 
 ### Commandes de validation
@@ -514,19 +553,19 @@ spec:
           - matrix:
               generators:
                 - git:
-                    repoURL: https://github.com/<org>/saga-orchestration-case-study.git
+                    repoURL: https://github.com/poc-hero/saga-orchestration-case-study.git
                     revision: HEAD
                     files:
-                      - path: "serviceCatalog.yaml"
+                      - path: saga-delivery/serviceCatalog.yaml
                 - list:
                     elementsYaml: "{{ .services | toJson }}"
           - matrix:
               generators:
                 - git:
-                    repoURL: https://github.com/<org>/saga-orchestration-case-study.git
+                    repoURL: https://github.com/poc-hero/saga-orchestration-case-study.git
                     revision: HEAD
                     files:
-                      - path: "versions/saga-*.yaml"
+                      - path: saga-delivery/versions/saga-*.yaml
                 - list:
                     elementsYaml: |
                       {{- $env := .env -}}
@@ -541,7 +580,7 @@ spec:
     spec:
       project: default
       source:
-        repoURL: "{{ printf \"https://github.com/<org>/%s.git\" .repoName }}"
+        repoURL: "{{ printf \"https://github.com/poc-hero/%s.git\" .repoName }}"
         targetRevision: HEAD
         path: "{{ .chartPath }}"
         helm:
@@ -551,13 +590,17 @@ spec:
           parameters:
             - name: deploymentEnv
               value: "{{ .env }}"
+            - name: saga-shared-config.deploymentEnv
+              value: "{{ .env }}"
             - name: image.tag
               value: "{{ .imageTag }}"
             - name: replicaCount
               value: "{{ .replicas }}"
+            - name: ingress.host
+              value: "{{ .ingressHost }}"
       destination:
-        name: cluster-target
-        namespace: "{{ .name }}"
+        name: "{{ .cluster }}"
+        namespace: "{{ .namespace }}"
       syncPolicy:
         automated:
           prune: true
@@ -693,6 +736,38 @@ kubectl --context "$ARGOCD_CONTEXT" -n "$ARGOCD_NAMESPACE" get secret
 kubectl --context "$ARGOCD_CONTEXT" -n "$ARGOCD_NAMESPACE" get secret -l argocd.argoproj.io/secret-type=repository
 ```
 
+### 6.1a Repos Git multiples : orchestration vs `serviceCatalog`
+
+Le secret `argocd/bootstrap/repository-secret.yaml.template` enregistre **un seul** depot Git (celui de ce repo, utilise par la Root Application et par les generateurs `git` de l'`ApplicationSet` pour lire `serviceCatalog.yaml` et `versions/`).
+
+Les `Application` generees ont une `source.repoURL` construite a partir de `repoName` dans `saga-delivery/serviceCatalog.yaml` (voir `applicationset.yaml`, champ `spec.template.spec.source.repoURL`). Des que ce depot **differe** de l'URL du repo orchestration, ou des qu'un depot applicatif est **prive**, Argo CD doit pouvoir **cloner chaque URL** utilisee : les identifiants ne se mettent **pas** dans `serviceCatalog`, ils se declarent **cote Argo CD**, par URL (ou par prefixe d'URL avec un credential template).
+
+**Principe :**
+
+- Chaque URL Git (ou prefixe couvert par un credential template) referencee par une `Application` doit etre **connue** d'Argo CD avec les bons droits si le depot est prive.
+- Un **premier** `Secret` avec `argocd.argoproj.io/secret-type: repository` suffit pour le repo GitOps ; pour **chaque autre** depot prive, ajouter **un autre** `Secret` (ou une autre methode : SSH, credential template, etc.).
+
+**Exemple : secret supplementaire pour un depot applicatif prive** (HTTPS + PAT) :
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mon-chart-repo-prive
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  type: git
+  url: https://github.com/mon-org/mon-autre-repo.git
+  username: git
+  password: "<PAT avec acces a ce depot (ou a l'org)>"
+```
+
+En pratique : variables d'environnement distinctes (`GIT_TOKEN_ORCHESTRATION`, `GIT_TOKEN_APPS`, etc.) et un `envsubst` par template, ou secrets injectes par Ansible / vault — **sans** committer les tokens dans Git.
+
+Si un **seul** PAT GitHub couvre plusieurs depots sous le meme compte ou organisation, on peut souvent reutiliser le meme mot de passe, mais Argo CD doit quand meme **associer** chaque URL (ou un prefixe URL via [credential templates](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#repositories)) aux credentials. Pour SSH, utiliser les secrets / cles prevus par la documentation Argo CD pour les depots.
+
 ### 6.2 Creer la root application
 
 Fichier concerne :
@@ -731,7 +806,7 @@ Extrait representatif de `root-application.yaml` :
 ```yaml
 spec:
   source:
-    repoURL: https://github.com/<org>/saga-orchestration-case-study.git
+    repoURL: https://github.com/poc-hero/saga-orchestration-case-study.git
     path: saga-delivery/argocd
     targetRevision: HEAD
 ```
@@ -1015,7 +1090,7 @@ kubectl --context "$TARGET_CONTEXT" -n site-service describe deploy/site-service
 
 | Element | Implante dans | Role |
 |--------|----------------|------|
-| `argocd/bootstrap/repository-secret.yaml.template` | `cluster-argocd` | donne l'acces Git a Argo CD |
+| `argocd/bootstrap/repository-secret.yaml.template` | `cluster-argocd` | donne l'acces Git au **repo orchestration** ; un secret supplementaire par URL si les charts sont dans d'autres depots prives (`serviceCatalog` / `repoURL`) |
 | `argocd/bootstrap/root-application.yaml` | `cluster-argocd` | connecte Argo CD au dossier `saga-delivery/argocd` |
 | repo infra Ansible (`/Users/mac/Documents/projet/infomaniak/infra-openstack/ansible`) | infrastructure externe | orchestre le bootstrap et centralise les variables |
 | script bash appele par Ansible | workstation / automation runner | execute `envsubst`, `kubectl apply`, `argocd login`, `argocd cluster add` |

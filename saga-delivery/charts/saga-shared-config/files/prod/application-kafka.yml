@@ -1,0 +1,4 @@
+# Profil technique Kafka (prod) — placeholder
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}

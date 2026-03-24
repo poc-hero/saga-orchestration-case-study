@@ -1,0 +1,13 @@
+env:
+  SPRING_PROFILES_ACTIVE: "dev,mongo,datadog"
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0"
+  SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
+  LOG_LEVEL: "DEBUG"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

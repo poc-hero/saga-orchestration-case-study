@@ -1,0 +1,18 @@
+# Variations d'environnement dev — une ligne par service.
+# cluster     : nom du cluster enregistré dans Argo CD (argocd cluster add ... --name <cluster>)
+# namespace   : namespace Kubernetes cible (évite le conflit dev/prod sur le même NS)
+# ingressHost : host Ingress exposé pour ce déploiement
+env: dev
+services:
+  - name: site-service
+    imageTag: "3.0.1.mongo"
+    replicas: "1"
+    cluster: cluster-target
+    namespace: site-service-dev
+    ingressHost: site-service.dev.saga-k8s.local
+  - name: uaa-service
+    imageTag: "1.0.0"
+    replicas: "1"
+    cluster: cluster-target
+    namespace: uaa-service-dev
+    ingressHost: uaa-service.dev.saga-k8s.local
