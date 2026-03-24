@@ -1,0 +1,18 @@
+replicaCount: 1
+
+image:
+  tag: 3.0.1.mongo
+
+env:
+  SPRING_PROFILES_ACTIVE: "dev,mongo"
+  VAULT_ADDR: "http://84.234.25.73:30200"  # adapter selon ton Vault dev
+  SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
+  LOG_LEVEL: "DEBUG"
+  mongodb-uri: "mongodb://${vault.mongo.username}:${vault.mongo.password}@${vault.mongo.host}:${vault.mongo.port}/saga?directConnection=true&authSource=admin"
+
+ingress:
+  host: site-service.saga-k8s.local
+
+# Option B : pas de sidecar
+vault:
+  enabled: false

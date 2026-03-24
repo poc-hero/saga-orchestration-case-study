@@ -1,0 +1,6 @@
+# Profil technique Datadog (prod) — placeholder
+management:
+  metrics:
+    export:
+      datadog:
+        enabled: true

@@ -1,0 +1,7 @@
+{{ include "saga-service-lib.deployment" . }}
+---
+{{ include "saga-service-lib.service" . }}
+---
+{{ include "saga-service-lib.ingress" . }}
+---
+{{ include "saga-service-lib.serviceaccount" . }}

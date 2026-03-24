@@ -100,4 +100,17 @@ class SiteCreationSagaIntegrationTest {
                 .exchange()
                 .expectStatus().is5xxServerError();
     }
+
+    @Test
+    void secretCheck_returns_ok_and_masked_value() {
+        webTestClient
+                .get()
+                .uri("/api/site/secret-check")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo("ok")
+                .jsonPath("$.secretLength").isEqualTo("17")
+                .jsonPath("$.masked").isEqualTo("te***ue");
+    }
 }

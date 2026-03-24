@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "saga-service-lib.fullname" . }}-config
+  labels:
+    {{- include "saga-service-lib.labels" . | nindent 4 }}
+data:
+  {{- $deploymentEnv := .Values.deploymentEnv | default "dev" }}
+  {{- range $path, $_ := .Files.Glob (printf "envs/%s/configmap-files/**" $deploymentEnv) }}
+  {{ base $path }}: |
+    {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}
+  {{- range $key, $val := .Values.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}

@@ -1,0 +1,16 @@
+# Option B — Spring Cloud Vault (actif quand SPRING_PROFILES_ACTIVE=staging)
+spring:
+  config:
+    import: optional:vault://
+  cloud:
+    vault:
+      uri: ${VAULT_ADDR}
+      authentication: KUBERNETES
+      kubernetes:
+        role: app-role
+        service-account-token-file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      kv:
+        enabled: true
+        backend: secret
+        default-context: app/saga/staging/site-service
+        application-name: app/saga/staging/site-service

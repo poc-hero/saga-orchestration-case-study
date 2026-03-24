@@ -1,0 +1,6 @@
+apiVersion: v2
+name: saga-shared-config
+description: ConfigMaps techniques partagées (Kafka, Mongo, Datadog, …) par environnement
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

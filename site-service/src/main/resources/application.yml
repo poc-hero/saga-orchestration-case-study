@@ -3,8 +3,28 @@ server:
 spring:
   application:
     name: site-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.mongo.MongoReactiveAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.mongo.MongoReactiveDataAutoConfiguration
+
+# Phase 5 Option 3 — Actuator refresh pour recharger les secrets sans restart
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,refresh
+  endpoint:
+    refresh:
+      enabled: true
 
 site:
   services:
     uaa:
       url: http://localhost:8080
+
+# Secret fourni par Vault (Option A : sidecar / Option B : Spring Cloud Vault)
+# En local sans Vault : valeur par défaut vide ou -Dapp.secrets.my-secret=xxx
+app:
+  secrets:
+    my-secret: ${my-secret:}

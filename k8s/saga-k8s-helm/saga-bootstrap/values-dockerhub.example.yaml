@@ -1,0 +1,12 @@
+# Copier en values-dockerhub.yaml et remplir (ne pas committer)
+# helm install saga-bootstrap . -n saga-helm-dev -f values.yaml -f values-dockerhub.yaml
+
+dockerhub:
+  enabled: true
+  server: https://index.docker.io/v1/
+  # Option A : auth en base64 (évite les caractères spéciaux dans le password)
+  # echo -n "username:password" | base64
+  auth: ""
+  # Option B : username + password (auth calculé automatiquement)
+  username: ""
+  password: ""

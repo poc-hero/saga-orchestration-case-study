@@ -1,3 +1,8 @@
+# Test: valeur fictive pour app.secrets.my-secret (Vault non utilisé en test)
+app:
+  secrets:
+    my-secret: ""
+
 # Logs des étapes Saga visibles pendant les tests d'intégration
 logging:
   level:
@@ -5,5 +10,5 @@ logging:
     com.pocmaster.site: INFO
     com.pocmaster.site.saga: INFO
     com.pocmaster.site.validation: INFO
-    com.pocmaster.site.site: INFO
+    com.pocmaster.site.creation: INFO
     com.pocmaster.site.indexation: INFO

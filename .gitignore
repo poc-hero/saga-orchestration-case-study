@@ -25,3 +25,8 @@ replay_pid*
 
 # K8s secrets (never commit)
 k8s/**/secrets/
+
+# Maven / Terraform local state
+**/target/
+*.tfstate
+*.tfstate.*

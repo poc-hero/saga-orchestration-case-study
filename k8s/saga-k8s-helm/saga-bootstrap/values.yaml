@@ -1,0 +1,17 @@
+# ServiceAccount partagée par site-service et uaa-service
+serviceAccount:
+  name: saga-app
+
+imagePullSecrets:
+  - name: dockerhub-creds
+
+# Secret Docker (images privées) — activer et fournir les credentials via -f values-secret.yaml
+# Ne pas committer les valeurs en clair dans Git
+dockerhub:
+  enabled: false
+  server: https://index.docker.io/v1/
+  # Option A : auth en base64 (echo -n "user:password" | base64)
+  auth: ""
+  # Option B : username + password (auth calculé automatiquement)
+  username: ""
+  password: ""  # Docker Hub: token PAT de préférence au mot de passe

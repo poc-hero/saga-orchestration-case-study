@@ -1,0 +1,68 @@
+{{- define "saga-service-lib.deployment" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "saga-service-lib.fullname" . }}
+  labels:
+    {{- include "saga-service-lib.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "saga-service-lib.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "saga-service-lib.selectorLabels" . | nindent 8 }}
+      {{- if and .Values.vault (eq .Values.vault.enabled true) }}
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: {{ .Values.vault.role | quote }}
+        vault.hashicorp.com/agent-inject-secret-application.properties: {{ .Values.vault.secretPath | quote }}
+        vault.hashicorp.com/agent-inject-template-application.properties: |
+          {{`{{- with secret "`}}{{ .Values.vault.secretPath }}{{`" -}}`}}
+          {{`{{- range $k, $v := .Data.data }}`}}
+          {{`{{ $k }}={{ $v }}`}}
+          {{`{{- end }}`}}
+          {{`{{- end }}`}}
+      {{- end }}
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ .Release.Name }}-app
+      {{- end }}
+      {{- if and (not .Values.serviceAccount.create) .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ int .Values.service.port }}
+          {{- if and .Values.vault (eq .Values.vault.enabled true) }}
+          env:
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: "file:/vault/secrets/"
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "saga-service-lib.fullname" . }}-config
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: {{ int .Values.service.port }}
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: {{ int .Values.service.port }}
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+{{- end }}

@@ -1,0 +1,49 @@
+replicaCount: 1
+
+image:
+  repository: andr7w/saga-orchestration-uaa-service
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "traefik"  # "nginx" ou "traefik" selon le contrôleur installé
+  host: uaa-service.saga-k8s.local
+  annotations: {}
+
+env:
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0"
+  LOG_LEVEL: "DEBUG"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  liveness:
+    path: /actuator/health
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readiness:
+    path: /actuator/health
+    initialDelaySeconds: 15
+    periodSeconds: 5
+
+# saga-app créée par saga-bootstrap — NE PAS mettre create: true
+serviceAccount:
+  create: false
+  name: saga-app
+
+imagePullSecrets: []  # hérités de saga-app (ServiceAccount)
+
+# Pas de Vault pour uaa-service
+vault:
+  enabled: false

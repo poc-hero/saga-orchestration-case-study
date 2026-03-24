@@ -1,0 +1,7 @@
+services:
+  - name: site-service
+    repoName: saga-orchestration-case-study
+    chartPath: saga-delivery/services/site-service
+  - name: uaa-service
+    repoName: saga-orchestration-case-study
+    chartPath: saga-delivery/services/uaa-service
