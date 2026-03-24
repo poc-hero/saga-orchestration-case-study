@@ -1,0 +1,429 @@
+---
+description: Argo CD GitOps — implémentation step-by-step (saga-delivery + bootstrap déclaratif)
+globs: argocd/**/*, saga-delivery/**/*, k8s/**/*.yaml
+alwaysApply: false
+---
+
+# Argo CD — Implémentation GitOps (Saga)
+
+Contexte cible : les manifests GitOps (`argocd/bootstrap` + `saga-delivery`) sont versionnés dans ce dépôt, mais l’instance Argo CD est déployée sur un cluster/une instance dédiée, séparée du cluster cible qui héberge `site-service`, `uaa-service` et les futurs services.
+
+---
+
+## 1. Structure
+
+### 1.1 Structure proposée (orientée services + factorisation) — inspirée de saga-k8s-helm
+
+Chaque **service est un chart** (`path: services/{{service}}`). Les fichiers `configmap-files/` sont **dans** le chart, donc accessibles via `.Files.Glob`. Un template `configmap.yaml` par service injecte leur contenu.
+
+```text
+saga-delivery/
+  charts/                                # Charts communs (library charts)
+    saga-service-lib/                    # Library chart — Deployment, Service, Ingress, ServiceAccount
+      Chart.yaml                         # type: library
+      templates/
+        _helpers.tpl
+        _deployment.yaml
+        _service.yaml
+        _ingress.yaml
+        _serviceaccount.yaml
+    saga-shared-config/                  # Chart dédié aux ConfigMaps techniques partagées
+      Chart.yaml
+      files/
+        dev/
+          application-kafka.yml
+          application-mongo.yml
+          application-datadog.yml
+        prod/
+          application-kafka.yml
+          application-mongo.yml
+          application-datadog.yml
+      templates/
+        _helpers.tpl
+        configmap.yaml
+  services/                              # Service-first — chaque service = chart complet
+    site-service/
+      Chart.yaml                         # dependencies: saga-service-lib + saga-shared-config
+      values.yaml                        # valeurs de base
+      envs/
+        dev/
+          values.yaml                    # image.tag, site.services.uaa.url, replicas, env: dev
+          configmap-files/
+            application.yaml             # Inclus via .Files.Glob dans templates/configmap.yaml
+        prod/
+          values.yaml
+          configmap-files/
+            application.yaml
+      templates/                         # configmap spécifique + wrapper unique du library chart
+        configmap.yaml                   # Kind: ConfigMap, data injecté depuis configmap-files
+        resources.yaml                   # inclut deployment, service, ingress, serviceaccount
+    uaa-service/
+      Chart.yaml                         # dependencies: saga-service-lib + saga-shared-config
+      values.yaml
+      envs/
+        dev/
+          values.yaml
+          configmap-files/
+            application.yaml
+        prod/
+          values.yaml
+          configmap-files/
+            application.yaml
+      templates/
+        configmap.yaml
+        resources.yaml
+  serviceCatalog.yaml                     # Catalogue stable des services (repoName, chartPath)
+  versions/                               # Variations par environnement
+    saga-dev.yaml                        # liste des services de dev + versions
+    saga-prod.yaml                       # liste des services de prod + versions
+  argocd/
+    applicationset.yaml                  # lit le catalogue + les versions d'env
+```
+
+_Note_ : l’ApplicationSet est dans `argocd/` (et non dans `templates/`) pour éviter toute confusion avec les templates Helm des charts.
+
+**Catalogue de services** : `serviceCatalog.yaml` contient les informations stables de delivery par service : `name`, `repoName`, `chartPath`.
+
+**Configs techniques communes** : le chart `charts/saga-shared-config` contient les configurations partagées entre microservices pour un environnement donné : Kafka, Mongo, Datadog, RabbitMQ, etc. Les fichiers vivent dans `charts/saga-shared-config/files/<env>/application-*.yml` et sont rendus en ConfigMap par ce chart dédié.
+
+**Fichiers de version** : chaque `versions/saga-<env>.yaml` contient uniquement les variations par environnement : `imageTag`, `replicas`, activation éventuelle et autres overrides propres à `dev`, `prod`, etc.
+
+**Chart par service** : chaque service a son **Chart.yaml** pour déclarer ses dépendances (saga-service-lib, uaa-service-lib, versions potentiellement différentes).
+
+**configmap-files via .Files.Glob** : le fichier `envs/<env>/configmap-files/application.yaml` est **dans** le chart, donc `.Files.Glob` peut le lire. Le template `configmap.yaml` l’injecte dans la ConfigMap Kubernetes. Argo CD génère le manifeste via Helm.
+
+**Réduction de redondance Helm** : pour éviter de répéter `deployment.yaml`, `service.yaml`, `ingress.yaml` et `serviceaccount.yaml` dans chaque service, on garde un seul `templates/resources.yaml` qui appelle les `include` du library chart. `configmap.yaml` reste séparé, car il porte la logique spécifique au service et à l’environnement.
+
+**Chargement automatique des profils partagés** : on retient l’option B sous forme explicite et robuste. Chaque chart service dépend de `saga-shared-config`. Helm rend automatiquement les templates du subchart `saga-shared-config` au moment du rendu du chart service. La `ConfigMap` partagée est donc créée par `charts/saga-shared-config/templates/configmap.yaml`, sans `include` explicite dans `resources.yaml`. Le fichier `templates/resources.yaml` du service reste réservé aux `include` du library chart `saga-service-lib` (`deployment`, `service`, `ingress`, `serviceaccount`). L’`ApplicationSet`, lui, ne fait aucun include Helm : il choisit le chart et les valeurs, puis laisse Helm rendre l’ensemble chart principal + dépendances. Le développeur n’a donc pas à maintenir une liste `sharedConfigProfiles`. La sélection réelle des profils actifs est ensuite faite par Spring via `SPRING_PROFILES_ACTIVE`.
+
+**ApplicationSet** : il lit `serviceCatalog.yaml` pour récupérer les métadonnées stables, lit `versions/saga-<env>.yaml` pour récupérer les overrides d’environnement, puis fusionne les deux jeux de données par `name`. Il ne choisit pas les fichiers de config partagée à monter ; cette responsabilité appartient au chart Helm et à sa dépendance `saga-shared-config`.
+
+---
+
+### 1.1b Exemple — `configmap.yaml` du service
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "saga-service-lib.fullname" . }}-config
+  labels:
+    {{- include "saga-service-lib.labels" . | nindent 4 }}
+data:
+  {{- $deploymentEnv := .Values.deploymentEnv | default "dev" }}
+  {{- range $path, $_ := .Files.Glob (printf "envs/%s/configmap-files/**" $deploymentEnv) }}
+  {{ base $path }}: |
+    {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}
+  {{- range $key, $val := .Values.env }}
+  {{ $key }}: {{ $val | quote }}
+  {{- end }}
+```
+
+- `envs/%s/configmap-files/**` : motif pour `envs/dev/configmap-files/application.yaml` (ou prod).
+- `base $path` : nom du fichier (ex. `application.yaml`) → clé dans la ConfigMap.
+- `.Values.env` : variables d’environnement additionnelles (SPRING_PROFILES_ACTIVE, LOG_LEVEL, etc.).
+- **deploymentEnv** : doit être défini dans `envs/<env>/values.yaml` (`deploymentEnv: dev`) ou passé en paramètre Helm pour que `.Files.Glob` cible le bon répertoire.
+
+### 1.1c Exemple — `configmap.yaml` du chart `saga-shared-config`
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "saga-shared-config.fullname" . }}
+  labels:
+    {{- include "saga-shared-config.labels" . | nindent 4 }}
+data:
+  {{- $deploymentEnv := .Values.deploymentEnv | default "dev" }}
+  {{- range $path, $_ := .Files.Glob (printf "files/%s/application-*.yml" $deploymentEnv) }}
+  {{ base $path }}: |
+    {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}
+```
+
+- `files/%s/application-*.yml` : charge automatiquement tous les profils techniques communs disponibles pour l’environnement (`application-kafka.yml`, `application-mongo.yml`, `application-datadog.yml`, etc.).
+- **pas de `sharedConfigProfiles`** : le chart partagé monte automatiquement tous les fichiers techniques disponibles pour l’environnement.
+- **plus d’hypothèse implicite** : la `ConfigMap` partagée est implémentée directement dans `charts/saga-shared-config/templates/configmap.yaml`, donc Helm lit ses propres fichiers sans dépendre d’un dossier externe visible ou non.
+
+### 1.1d Exemple — dépendances Helm du chart service
+
+```yaml
+dependencies:
+  - name: saga-service-lib
+    version: 1.0.0
+    repository: "file://../../charts/saga-service-lib"
+  - name: saga-shared-config
+    version: 1.0.0
+    repository: "file://../../charts/saga-shared-config"
+```
+
+Le chart service dépend donc à la fois :
+
+- de `saga-service-lib` pour les ressources Kubernetes standard
+- de `saga-shared-config` pour la ConfigMap des profils techniques partagés
+
+Important : cette dépendance suffit pour que Helm rende aussi `charts/saga-shared-config/templates/configmap.yaml`. Il n’y a rien à ajouter dans `templates/resources.yaml` pour "inclure" cette ConfigMap, et l’`ApplicationSet` ne s’en charge pas non plus.
+
+---
+
+### 1.1e Exemple — `values.yaml` d’environnement avec profils Spring
+
+```yaml
+deploymentEnv: dev
+env:
+  SPRING_PROFILES_ACTIVE: "dev,mongo,datadog"
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0"
+```
+
+Le service déclare simplement ses profils Spring actifs. Si `application-mongo.yml` et `application-datadog.yml` sont fournis par la dépendance `saga-shared-config` pour `dev`, Spring les consomme automatiquement car leurs profils sont actifs. Si `application-kafka.yml` est aussi présent mais que `kafka` n’est pas dans `SPRING_PROFILES_ACTIVE`, il reste monté mais non activé.
+
+---
+
+### 1.1f Catalogue de services — exemple `serviceCatalog.yaml`
+
+```yaml
+services:
+  - name: site-service
+    repoName: saga-orchestration-case-study
+    chartPath: services/site-service
+  - name: uaa-service
+    repoName: saga-orchestration-case-study
+    chartPath: services/uaa-service
+```
+
+Le catalogue change rarement. Il centralise ce qui est stable pour tous les environnements.
+
+### 1.1g Fichier de version — exemple `versions/saga-dev.yaml`
+
+```yaml
+env: dev
+services:
+  - name: site-service
+    imageTag: "3.0.1.mongo"
+    replicas: "1"
+    chartRevision: "1.0.0"              # optionnel : utile seulement si l’ApplicationSet le mappe explicitement
+  - name: uaa-service
+    imageTag: "1.0.0"
+    replicas: "1"
+```
+
+Le développeur édite **ce seul fichier** pour mettre à jour les versions de l’environnement. Il n’a pas besoin d’y répéter le repo ni le `chartPath`.
+
+_Note_ : `chartRevision` peut être ajouté dans `versions/saga-<env>.yaml`, mais ce n’est **pas** un champ interprété automatiquement par Argo CD dans ce modèle. Il devient utile seulement si l’ApplicationSet le mappe explicitement, par exemple vers `source.targetRevision` dans un scénario où le chart Helm est versionné séparément ou externalisé.
+
+_Note_ : `repoName` suffit ici, car l’ApplicationSet reconstruit le `repoURL` à partir d’une convention commune, par exemple `https://github.com/<org>/<repoName>.git`.
+
+### 1.1h ApplicationSet — lecture du catalogue + fusion avec les versions
+
+Principe :
+
+1. lire `serviceCatalog.yaml`
+2. extraire la liste `services`
+3. lire `versions/saga-dev.yaml` ou `versions/saga-prod.yaml`
+4. extraire la liste `services`
+5. fusionner les entrées par `name`
+
+```yaml
+goTemplate: true
+goTemplateOptions: ["missingkey=error"]
+spec:
+  generators:
+    - merge:
+        mergeKeys:
+          - name
+        generators:
+          - matrix:
+              generators:
+                - git:
+                    repoURL: https://github.com/<org>/saga-orchestration-case-study.git
+                    revision: HEAD
+                    files:
+                      - path: "serviceCatalog.yaml"
+                - list:
+                    elementsYaml: "{{ .services | toJson }}"
+          - matrix:
+              generators:
+                - git:
+                    repoURL: https://github.com/<org>/saga-orchestration-case-study.git
+                    revision: HEAD
+                    files:
+                      - path: "versions/saga-dev.yaml"
+                - list:
+                    elementsYaml: "{{ .services | toJson }}"
+  template:
+    metadata:
+      name: "{{ .name }}-{{ .env }}"
+    spec:
+      source:
+        repoURL: "{{ printf \"https://github.com/<org>/%s.git\" .repoName }}"
+        path: "{{ .chartPath }}"
+        helm:
+          valueFiles:
+            - values.yaml
+            - envs/{{ .env }}/values.yaml
+          parameters:
+            - name: deploymentEnv
+              value: "{{ .env }}"
+            - name: image.tag
+              value: "{{ .imageTag }}"
+            - name: replicaCount
+              value: "{{ .replicas }}"
+```
+
+Dans cet exemple, l’`ApplicationSet` lit réellement le catalogue via un `git` generator, transforme sa liste `services` en éléments avec `list.elementsYaml`, fait la même chose pour le fichier de version, puis fusionne les deux par `name`.
+
+Le résultat final par service contient donc :
+
+- depuis `serviceCatalog.yaml` : `repoName`, `chartPath`
+- depuis `versions/saga-dev.yaml` : `env`, `imageTag`, `replicas`, `chartRevision` éventuel
+
+Le `repoURL` n’est pas stocké dans les fichiers d’environnement. Il est reconstruit dans le template à partir de `repoName`.
+
+Point clé : l’`ApplicationSet` ne sélectionne pas les fichiers de config partagée. Il transmet uniquement l’environnement (`env`) et les valeurs du service à Helm. Le chargement automatique des profils techniques se fait dans `charts/saga-shared-config/templates/configmap.yaml`.
+
+### 1.2 Adaptation dans le dépôt courant
+
+Dans ce dépôt, on réutilise `k8s/saga-k8s-helm/` existant (qui applique déjà ce pattern avec saga-service-lib). L’ApplicationSet pointe vers `k8s/saga-k8s-helm/site-service` et `uaa-service`.
+
+```
+saga-orchestration-case-study/
+├── argocd/bootstrap/
+│   ├── README.md
+│   ├── repository-secret.yaml.template    # enregistre le repo Git dans Argo CD
+│   ├── root-application.yaml              # dit à Argo CD de charger saga-delivery/argocd
+│   └── cluster-registration.md            # enregistrement du cluster cible dans Argo CD
+├── saga-delivery/                       # Versions + ApplicationSet
+│   ├── README.md
+│   ├── charts/
+│   │   ├── saga-service-lib/
+│   │   └── saga-shared-config/
+│   ├── serviceCatalog.yaml              # repoName + chartPath par service
+│   ├── versions/
+│   │   ├── saga-dev.yaml                # env + liste des services
+│   │   └── saga-prod.yaml
+│   └── argocd/
+│       └── applicationset.yaml         # fusionne le catalogue et les versions d'env
+├── k8s/saga-k8s-helm/                   # Charts existants (saga-service-lib + site-service, uaa-service)
+├── site-service/
+├── uaa-service/
+└── ...
+```
+
+**Séparation future** : créer `saga-delivery/charts/saga-service-lib`, `saga-delivery/charts/saga-shared-config` et `saga-delivery/services/*` en s’inspirant de `k8s/saga-k8s-helm`. Réutiliser ou copier les templates de saga-service-lib. Implémenter la ConfigMap locale dans le chart service et la ConfigMap technique partagée dans `charts/saga-shared-config/templates/configmap.yaml`.
+
+---
+
+## 1.3 Liaison avec l’instance Argo CD
+
+L’instance Argo CD est déployée sur un cluster/une instance dédiée. Les services métier (`site-service`, `uaa-service`, puis les futurs services) sont déployés sur un cluster cible séparé. La chaîne de liaison entre Git, Argo CD et le cluster cible doit donc être explicite.
+
+### 1.3a Bootstrap minimal côté Argo CD
+
+Les éléments minimums sont :
+
+- `argocd/bootstrap/repository-secret.yaml.template` : déclare le repo Git dans Argo CD
+- `argocd/bootstrap/root-application.yaml` : crée une Application racine qui pointe vers `saga-delivery/argocd`
+- `argocd/bootstrap/cluster-registration.md` : documente l’enregistrement du cluster cible dans Argo CD
+
+Le dossier `argocd/bootstrap` peut vivre dans **ce dépôt** ou dans un **repo séparé** de type `argocd-bootstrap`. Ce point ne change pas le rôle des manifests : ce sont toujours des ressources à appliquer sur le cluster où Argo CD est installé.
+
+Sans `root-application.yaml`, Argo CD connaît le repo, mais ne sait pas automatiquement qu’il doit charger `saga-delivery/argocd/applicationset.yaml`.
+
+Les commandes `kubectl apply -f argocd/bootstrap/...` se font contre le **cluster Kubernetes qui héberge Argo CD**, car `repository-secret`, `Application` racine et éventuelles ressources d’enregistrement de cluster appartiennent à l’instance Argo CD.
+
+### 1.3b Exemple — `root-application.yaml`
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saga-delivery-root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/<org>/saga-orchestration-case-study.git
+    targetRevision: HEAD
+    path: saga-delivery/argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+Cette Application racine charge le dossier `saga-delivery/argocd`, donc l’`ApplicationSet`, qui lui-même lit `serviceCatalog.yaml`, lit `versions/saga-<env>.yaml` et génère les Applications des services. Chaque chart service embarque ensuite sa dépendance `saga-shared-config`.
+
+La `root application` référence le repo GitOps qui contient `saga-delivery/argocd`. Les Applications générées pour les services reconstruisent ensuite leur `source.repoURL` à partir de `serviceCatalog.yaml`.
+
+Autrement dit :
+
+- le `repoURL` de `root-application.yaml` = repo qui contient `saga-delivery/argocd`
+- le `repoName` de chaque service = champ `services[].repoName` dans `serviceCatalog.yaml`
+- le `repoURL` final de chaque service = construit par l’`ApplicationSet` à partir de `repoName`
+
+### 1.3c Cluster cible
+
+Le cluster cible qui héberge `site-service`, `uaa-service` et les futurs services doit être enregistré dans Argo CD au préalable. La règle GitOps présentée ici documente ce prérequis dans `argocd/bootstrap/cluster-registration.md`.
+
+Le `root-application.yaml` est appliqué sur le cluster où tourne Argo CD. Les Applications générées par l’`ApplicationSet` pointent ensuite vers le cluster cible enregistré.
+
+Chaîne complète :
+
+1. Argo CD connaît le repo Git
+2. Argo CD applique `argocd/bootstrap/root-application.yaml` sur son cluster dédié
+3. la root application charge `saga-delivery/argocd/applicationset.yaml`
+4. l’ApplicationSet lit `serviceCatalog.yaml` puis `versions/saga-<env>.yaml`
+5. les Applications générées déploient les charts vers le cluster cible enregistré
+
+---
+
+## 2. Ordre de déploiement
+
+1. **Bootstrap** : enregistrer le repo dans Argo CD
+   ```bash
+   export GIT_TOKEN="<token-github>"
+   envsubst < argocd/bootstrap/repository-secret.yaml.template | kubectl apply -f -
+   ```
+
+   Cette commande s’exécute contre le cluster où Argo CD est installé.
+
+2. **Root Application** : connecter l’instance Argo CD au dossier `saga-delivery/argocd`
+   ```bash
+   kubectl apply -f argocd/bootstrap/root-application.yaml
+   ```
+
+   Cette commande s’exécute elle aussi contre le cluster où Argo CD est installé.
+
+3. **Cluster cible** : enregistrer le cluster qui héberge les services dans Argo CD
+
+4. **ApplicationSet** : il est ensuite chargé par la root application
+   ```bash
+   # pas nécessaire si root-application.yaml pointe déjà sur saga-delivery/argocd
+   ```
+
+5. **Vérifier** : `argocd app list` ou Argo CD UI
+
+---
+
+## 3. Garder en sync
+
+- `serviceCatalog.yaml` = catalogue commun des services (`repoName`, `chartPath`)
+- `charts/saga-shared-config/files/<env>/application-*.yml` = profils techniques communs disponibles pour l’environnement
+- `versions/saga-<env>.yaml` = **unique source de vérité** pour les variations d’un environnement
+- `argocd/applicationset.yaml` = template + lecture du catalogue + fusion avec les versions
+- `argocd/bootstrap/root-application.yaml` = point d’entrée entre l’instance Argo CD et `saga-delivery/argocd`
+- `serviceCatalog.yaml > services[].repoName` = repo Git déclaré par service via son nom logique
+
+Pour changer une version : modifier **uniquement** le fichier `versions/saga-<env>.yaml` concerné. Pour changer le repo ou le `chartPath` d’un service : modifier `serviceCatalog.yaml`.
+
+Pour ajouter une config technique commune à tous les services d’un environnement : ajouter un fichier `charts/saga-shared-config/files/<env>/application-<profile>.yml`. Aucun changement n’est nécessaire dans l’`ApplicationSet`. La dépendance Helm `saga-shared-config` le rendra automatiquement dans sa ConfigMap, et Spring l’activera uniquement si `<profile>` figure dans `SPRING_PROFILES_ACTIVE`.
+
+---
+
+## 4. Référence
+
+- Plan : `docs/deploy_plan/KUBERNETES_DEPLOYMENT_PLAN_SAGA.md` (Phase 2)

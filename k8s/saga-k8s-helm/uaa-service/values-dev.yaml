@@ -1,10 +1,14 @@
 replicaCount: 1
 
 image:
-  tag: latest
+  tag: "1.0.0"
 
 env:
   LOG_LEVEL: "DEBUG"
 
 ingress:
   host: uaa-service.saga-k8s.local
+
+# Pas de Vault pour uaa-service
+vault:
+  enabled: false

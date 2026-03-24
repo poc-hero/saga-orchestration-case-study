@@ -9,6 +9,10 @@ env:
 ingress:
   host: uaa-service.saga.example.com
 
+# Pas de Vault pour uaa-service
+vault:
+  enabled: false
+
 resources:
   requests:
     cpu: 250m
