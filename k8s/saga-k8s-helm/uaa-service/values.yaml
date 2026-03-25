@@ -37,9 +37,8 @@ probes:
     initialDelaySeconds: 15
     periodSeconds: 5
 
-# saga-app créée par saga-bootstrap — NE PAS mettre create: true
+# saga-app créée par saga-bootstrap (le library chart ne crée pas de SA)
 serviceAccount:
-  create: false
   name: saga-app
 
 imagePullSecrets: []  # hérités de saga-app (ServiceAccount)

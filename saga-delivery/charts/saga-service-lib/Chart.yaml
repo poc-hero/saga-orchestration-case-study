@@ -1,5 +1,5 @@
 apiVersion: v2
 name: saga-service-lib
-description: Library chart — Deployment, Service, Ingress, ServiceAccount
+description: Library chart — Deployment, Service, Ingress (ServiceAccount hors chart)
 type: library
 version: 1.0.0

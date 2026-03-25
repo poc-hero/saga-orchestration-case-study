@@ -22,8 +22,7 @@ k8s/saga-k8s-helm/
 │       ├── _deployment.yaml              # define "saga-service-lib.deployment"
 │       ├── _service.yaml                 # define "saga-service-lib.service"
 │       ├── _ingress.yaml                 # define "saga-service-lib.ingress"
-│       ├── _configmap.yaml              # define "saga-service-lib.configmap"
-│       └── _serviceaccount.yaml         # define "saga-service-lib.serviceaccount"
+│       └── _configmap.yaml              # define "saga-service-lib.configmap"
 ├── site-service/                        # Chart applicatif — dépend de saga-service-lib
 │   ├── Chart.yaml                       # dependencies: saga-service-lib
 │   ├── values.yaml                      # Valeurs spécifiques site-service
@@ -33,14 +32,13 @@ k8s/saga-k8s-helm/
 │       ├── deployment.yaml             # {{ include "saga-service-lib.deployment" . }}
 │       ├── service.yaml
 │       ├── ingress.yaml
-│       ├── configmap.yaml
-│       └── serviceaccount.yaml
+│       └── configmap.yaml
 ├── uaa-service/
 │   └── (même structure — values différents)
 └── README.md
 ```
 
-**Principe DRY** : la logique commune (Deployment, Service, Ingress, ConfigMap) est définie dans `saga-service-lib`. La ServiceAccount `saga-app` est créée une fois par `saga-bootstrap` et partagée par les deux services (`serviceAccount.create: false`, `serviceAccount.name: saga-app`). Les `imagePullSecrets` viennent de la SA — **ne pas mettre `serviceAccount.create: true`** sinon le pod utiliserait une SA locale sans credentials.
+**Principe DRY** : la logique commune (Deployment, Service, Ingress, ConfigMap) est définie dans `saga-service-lib`. La ServiceAccount `saga-app` est créée une fois par `saga-bootstrap` et partagée par les deux services (`serviceAccount.name: saga-app`). Le library chart ne définit pas de ressource `ServiceAccount`. Les `imagePullSecrets` viennent de la SA déclarée dans `saga-bootstrap`.
 
 ---
 
@@ -184,8 +182,7 @@ helm list -n saga-helm-dev
 | `env.*` | Variables d'environnement injectées via ConfigMap | voir values.yaml |
 | `resources.requests/limits` | CPU/mémoire | `100m-500m CPU, 256Mi-512Mi mem` |
 | `probes.liveness/readiness` | Probes actuator | `/actuator/health` |
-| `serviceAccount.create` | Créer un ServiceAccount | `true` |
-| `serviceAccount.name` | Nom du ServiceAccount | `saga-app` |
+| `serviceAccount.name` | Nom du ServiceAccount existant (créé par saga-bootstrap) | `saga-app` |
 | `imagePullSecrets` | Secrets pour pull d'images privées | `[]` |
 
 ---

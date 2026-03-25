@@ -195,10 +195,16 @@ Si le rôle `app-role` n'existe pas encore :
 ```bash
 vault write auth/kubernetes/role/app-role \
   bound_service_account_names=saga-app \
-  bound_service_account_namespaces=saga-helm-dev \
+  bound_service_account_namespaces=saga-dev,saga-prod \
   policies=site-service-policy \
   ttl=1h
 ```
+
+**Namespaces et ServiceAccount (GitOps `saga-delivery`)**
+
+- Les workloads **dev** et **prod** sont deployes dans **`saga-dev`** et **`saga-prod`** (voir `versions/saga-*.yaml` et `argocd/00-namespaces.yaml`), plus **`saga-helm-dev`** si tu as encore un ancien deploiement.
+- Le chart `saga-service-lib` **ne cree plus** de `ServiceAccount` ; les pods utilisent **`serviceAccount.name`** (ex. `saga-app` dans `saga-delivery/services/*/values.yaml`). La SA **`saga-app`** est creee par **`saga-delivery/argocd/01-serviceaccount-saga-app.yaml`** dans `saga-dev` et `saga-prod` (identite stable partagee pour Vault).
+- **Vault** : `bound_service_account_names=saga-app` et `bound_service_account_namespaces` couvrant les namespaces deployes (ex. `saga-dev,saga-prod`).
 
 ---
 
@@ -294,15 +300,17 @@ Résultat : Spring charge `/vault/secrets/application.properties` au démarrage 
 Depuis votre machine, exécutez dans le pod pour inspecter les fichiers écrits par l'Agent Vault :
 
 ```bash
-# Récupérer le nom du pod site-service (ajuster le namespace si votre release diffère)
-POD=$(kubectl get pods -n saga-helm-dev -l app=site-service -o jsonpath='{.items[0].metadata.name}')
+# Récupérer le nom du pod site-service (namespace GitOps actuel : saga-dev)
+POD=$(kubectl get pods -n saga-dev -l app=site-service-dev -o jsonpath='{.items[0].metadata.name}')
 
 # Lister les fichiers dans /vault/secrets/
-kubectl exec -n saga-helm-dev $POD -c app -- ls -la /vault/secrets/
+kubectl exec -n saga-dev $POD -c app -- ls -la /vault/secrets/
 
 # Lire le contenu du fichier application.properties (clés/valeurs injectées par Vault)
-kubectl exec -n saga-helm-dev $POD -c app -- cat /vault/secrets/application.properties
+kubectl exec -n saga-dev $POD -c app -- cat /vault/secrets/application.properties
 ```
+
+> **Labels** : avec le chart actuel, le label `app` vaut le **Release.Name** Helm (ex. `site-service-dev`). Adapter `-l app=...` si besoin (`kubectl get pods -n saga-dev --show-labels`).
 
 Exemple de sortie :
 
@@ -355,7 +363,7 @@ Pas de `spring-cloud-starter-vault-config`. L'app lit uniquement une property Sp
 **Option 1 — Redémarrage manuel du pod**
 
 ```bash
-kubectl rollout restart deployment/site-service -n saga-helm-dev
+kubectl rollout restart deployment/site-service-dev -n saga-dev
 ```
 
 **Option 2 — SIGHUP vers le sidecar**

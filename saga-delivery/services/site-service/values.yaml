@@ -34,7 +34,6 @@ probes:
     periodSeconds: 5
 
 serviceAccount:
-  create: false
   name: saga-app
 
 imagePullSecrets: []

@@ -126,8 +126,7 @@ k8s/saga-k8s-helm/
 │       ├── _deployment.yaml                  # define "saga-service-lib.deployment"
 │       ├── _service.yaml                     # define "saga-service-lib.service"
 │       ├── _ingress.yaml                     # define "saga-service-lib.ingress"
-│       ├── _configmap.yaml                  # define "saga-service-lib.configmap"
-│       └── _serviceaccount.yaml              # define "saga-service-lib.serviceaccount"
+│       └── _configmap.yaml                  # define "saga-service-lib.configmap"
 ├── site-service/                            # Chart applicatif — dépend de saga-service-lib
 │   ├── Chart.yaml                            # dependencies: saga-service-lib (file://../saga-service-lib)
 │   ├── values.yaml                           # image, env (SITE_SERVICES_UAA_URL), ingress.host, etc.
@@ -137,13 +136,12 @@ k8s/saga-k8s-helm/
 │       ├── deployment.yaml
 │       ├── service.yaml
 │       ├── ingress.yaml
-│       ├── configmap.yaml
-│       └── serviceaccount.yaml
+│       └── configmap.yaml
 └── uaa-service/
     └── (même structure — values spécifiques uaa-service)
 ```
 
-**Principe DRY** : la logique commune (Deployment, Service, Ingress, ConfigMap, ServiceAccount) est définie une seule fois dans `saga-service-lib`. Les charts applicatifs ne fournissent que leurs valeurs. Avant le premier déploiement : `helm dependency update` dans chaque chart.
+**Principe DRY** : la logique commune (Deployment, Service, Ingress, ConfigMap) est définie une seule fois dans `saga-service-lib`. La `ServiceAccount` partagée `saga-app` est créée par `saga-bootstrap` (Helm classique) ou par `saga-delivery/argocd/01-serviceaccount-saga-app.yaml` (GitOps). Les charts applicatifs ne fournissent que leurs valeurs. Avant le premier déploiement : `helm dependency update` dans chaque chart.
 
 #### Déploiement Helm (sans Argo CD)
 

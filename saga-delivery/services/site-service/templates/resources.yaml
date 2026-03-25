@@ -3,5 +3,3 @@
 {{ include "saga-service-lib.service" . }}
 ---
 {{ include "saga-service-lib.ingress" . }}
----
-{{ include "saga-service-lib.serviceaccount" . }}

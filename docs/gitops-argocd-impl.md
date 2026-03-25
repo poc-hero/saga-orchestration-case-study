@@ -143,7 +143,6 @@ saga-delivery/
         _deployment.yaml
         _service.yaml
         _ingress.yaml
-        _serviceaccount.yaml
     saga-shared-config/
       Chart.yaml
       files/
@@ -349,8 +348,6 @@ data:
 {{ include "saga-service-lib.service" . }}
 ---
 {{ include "saga-service-lib.ingress" . }}
----
-{{ include "saga-service-lib.serviceaccount" . }}
 ```
 
 Important :
