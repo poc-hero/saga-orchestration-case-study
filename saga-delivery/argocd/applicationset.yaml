@@ -25,7 +25,7 @@ spec:
                       {{- range .services }}
                       {{- $svc := . }}
                       {{- range $env := list "dev" "prod" }}
-                      {{- $items = append $items (merge (dict) $svc (dict "env" $env)) }}
+                      {{- $items = append $items (dict "name" $svc.name "repoName" $svc.repoName "chartPath" $svc.chartPath "env" $env) }}
                       {{- end }}
                       {{- end }}
                       {{ $items | toJson }}
@@ -41,7 +41,7 @@ spec:
                       {{- $env := .env -}}
                       {{- $items := list -}}
                       {{- range .services }}
-                      {{- $items = append $items (merge (dict) . (dict "env" $env)) -}}
+                      {{- $items = append $items (dict "name" .name "imageTag" .imageTag "replicas" .replicas "cluster" .cluster "namespace" .namespace "ingressHost" .ingressHost "env" $env) -}}
                       {{- end }}
                       {{ $items | toJson }}
   template:

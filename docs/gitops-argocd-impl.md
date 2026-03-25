@@ -536,7 +536,7 @@ L'`ApplicationSet` doit :
 
 Le premier matrix expanse chaque service du catalogue sur chaque env (`list "dev" "prod"`) ; le second matrix lit les fichiers version. Le merge combine les deux par `(name, env)`.
 
-**Point technique Sprig** : `merge` mute son premier argument. Dans une boucle imbriquee `range services / range envs`, il faut ecrire `merge (dict) $svc (dict "env" $env)` pour merger dans un **nouveau** dict a chaque iteration, sinon toutes les copies pointent sur le meme objet et les cles ne sont plus uniques.
+**Point technique** : eviter `merge` Sprig dans `elementsYaml` ; preferer un `dict` explicite par ligne (`name`, `repoName`, `chartPath`, `env`, etc.) pour garantir des jeux de parametres distincts et eviter les doublons sur les `mergeKeys`.
 
 ### Exemple d'`applicationset.yaml`
 
@@ -568,7 +568,7 @@ spec:
                       {{- range .services }}
                       {{- $svc := . }}
                       {{- range $env := list "dev" "prod" }}
-                      {{- $items = append $items (merge (dict) $svc (dict "env" $env)) }}
+                      {{- $items = append $items (dict "name" $svc.name "repoName" $svc.repoName "chartPath" $svc.chartPath "env" $env) }}
                       {{- end }}
                       {{- end }}
                       {{ $items | toJson }}
@@ -584,7 +584,7 @@ spec:
                       {{- $env := .env -}}
                       {{- $items := list -}}
                       {{- range .services }}
-                      {{- $items = append $items (merge (dict) . (dict "env" $env)) -}}
+                      {{- $items = append $items (dict "name" .name "imageTag" .imageTag "replicas" .replicas "cluster" .cluster "namespace" .namespace "ingressHost" .ingressHost "env" $env) -}}
                       {{- end }}
                       {{ $items | toJson }}
   template:
