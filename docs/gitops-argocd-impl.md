@@ -449,32 +449,30 @@ services:
 
 ### 4.2 `versions/saga-dev.yaml`
 
-Chaque service declare aussi **ou** il deploye (cluster Argo CD enregistre, namespace K8s) et **quel host** Ingress utiliser. Cela evite le conflit dev/prod sur le meme namespace.
+Un **namespace** et un **cluster** Argo CD partages par environnement (`namespace` et `cluster` a la racine du fichier) : toutes les apps de l'env deployent vers le meme `destination` (ex. `saga-dev` + `in-cluster`). Chaque service declare encore le **host** Ingress.
 
 Exemple :
 
 ```yaml
 env: dev
+namespace: saga-dev
+cluster: cluster-target
 services:
   - name: site-service
     imageTag: "3.0.1.mongo"
     replicas: "1"
-    cluster: cluster-target
-    namespace: site-service-dev
     ingressHost: site-service.dev.saga-k8s.local
   - name: uaa-service
     imageTag: "1.0.0"
     replicas: "1"
-    cluster: cluster-target
-    namespace: uaa-service-dev
     ingressHost: uaa-service.dev.saga-k8s.local
 ```
 
 | Champ | Role |
 |--------|------|
-| `cluster` | `spec.destination.name` de l'Application — doit correspondre a un cluster enregistre dans Argo CD (`argocd cluster add ... --name ...`) |
-| `namespace` | Namespace Kubernetes cible (distinct par env si besoin) |
-| `ingressHost` | Passe en parametre Helm `ingress.host` pour le chart service |
+| `namespace` (racine) | Namespace Kubernetes **commun** a tous les services de cet env (`spec.destination.namespace`) |
+| `cluster` (racine) | `spec.destination.name` — nom du cluster enregistre dans Argo CD (`in-cluster`, `cluster-target`, etc.) |
+| `ingressHost` (par service) | Passe en parametre Helm `ingress.host` pour le chart service |
 
 ### 4.3 `versions/saga-prod.yaml`
 
@@ -482,18 +480,16 @@ Meme structure ; tu peux utiliser un **autre** `cluster` pour la prod (ex. `clus
 
 ```yaml
 env: prod
+namespace: saga-prod
+cluster: cluster-target
 services:
   - name: site-service
     imageTag: "3.0.5"
     replicas: "2"
-    cluster: cluster-target
-    namespace: site-service-prod
     ingressHost: site-service.prod.saga-k8s.local
   - name: uaa-service
     imageTag: "1.0.3"
     replicas: "2"
-    cluster: cluster-target
-    namespace: uaa-service-prod
     ingressHost: uaa-service.prod.saga-k8s.local
 ```
 
@@ -582,9 +578,11 @@ spec:
                 - list:
                     elementsYaml: |
                       {{- $env := .env -}}
+                      {{- $ns := .namespace -}}
+                      {{- $cluster := .cluster -}}
                       {{- $items := list -}}
                       {{- range .services }}
-                      {{- $items = append $items (dict "name" .name "imageTag" .imageTag "replicas" .replicas "cluster" .cluster "namespace" .namespace "ingressHost" .ingressHost "env" $env) -}}
+                      {{- $items = append $items (dict "name" .name "imageTag" .imageTag "replicas" .replicas "cluster" $cluster "namespace" $ns "ingressHost" .ingressHost "env" $env) -}}
                       {{- end }}
                       {{ $items | toJson }}
   template:
@@ -618,7 +616,11 @@ spec:
         automated:
           prune: true
           selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
 ```
+
+`CreateNamespace=true` : Argo CD cree le namespace `destination.namespace` si absent (sinon sync sans objet cree).
 
 ### Commandes de verification (Phase 5 uniquement)
 
@@ -841,7 +843,7 @@ Une fois l'`ApplicationSet` creee comme ressource Kubernetes, le controleur `App
 - execute les generators
 - cree les Applications enfants (ex. `site-service-dev`, `uaa-service-prod`)
 
-Chaque Application enfant a `destination.name: cluster-target` et `destination.namespace: <service>`.
+Chaque Application enfant a `destination.name: cluster-target` et `destination.namespace: saga-dev` ou `saga-prod` (un NS par env, partage entre services).
 Lors de leur sync, ce sont elles qui appliquent les manifests applicatifs sur `cluster-target`.
 
 Cela explique pourquoi les verifications suivantes ne sont valides qu'apres le bootstrap complet :
@@ -1234,8 +1236,8 @@ flowchart TB
     end
 
     subgraph cluster_target["cluster-target"]
-        NS1[("namespace: site-service")]
-        NS2[("namespace: uaa-service")]
+        NS1[("namespace: saga-dev")]
+        NS2[("namespace: saga-prod")]
     end
 
     subgraph repo["Repo Git"]

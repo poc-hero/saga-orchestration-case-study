@@ -1,14 +1,12 @@
 env: prod
+namespace: saga-prod
+cluster: in-cluster
 services:
   - name: site-service
     imageTag: "3.0.5"
     replicas: "2"
-    cluster: in-cluster
-    namespace: site-service-prod
     ingressHost: site-service.prod.saga-k8s.local
   - name: uaa-service
     imageTag: "1.0.3"
     replicas: "2"
-    cluster: in-cluster
-    namespace: uaa-service-prod
     ingressHost: uaa-service.prod.saga-k8s.local

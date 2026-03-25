@@ -39,9 +39,11 @@ spec:
                 - list:
                     elementsYaml: |
                       {{- $env := .env -}}
+                      {{- $ns := .namespace -}}
+                      {{- $cluster := .cluster -}}
                       {{- $items := list -}}
                       {{- range .services }}
-                      {{- $items = append $items (dict "name" .name "imageTag" .imageTag "replicas" .replicas "cluster" .cluster "namespace" .namespace "ingressHost" .ingressHost "env" $env) -}}
+                      {{- $items = append $items (dict "name" .name "imageTag" .imageTag "replicas" .replicas "cluster" $cluster "namespace" $ns "ingressHost" .ingressHost "env" $env) -}}
                       {{- end }}
                       {{ $items | toJson }}
   template:
@@ -75,3 +77,5 @@ spec:
         automated:
           prune: true
           selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

@@ -276,9 +276,10 @@ Dans cet exemple, l’`ApplicationSet` lit réellement le catalogue via un `git`
 Le résultat final par service (après fusion par `name`) contient donc :
 
 - depuis `serviceCatalog.yaml` : `repoName`, `chartPath`
-- depuis `versions/saga-*.yaml` : `env`, `imageTag`, `replicas`, et par service **`cluster`** (nom du cluster enregistré dans Argo CD), **`namespace`** (NS Kubernetes cible), **`ingressHost`** (paramètre Helm `ingress.host`)
+- depuis `versions/saga-*.yaml` : `env`, **`namespace`** et **`cluster`** à la racine du fichier (NS et cluster Argo CD partagés par env), par service `imageTag`, `replicas`, **`ingressHost`**
 
-Le `repoURL` n’est pas stocké dans les fichiers d’environnement. Il est reconstruit dans le template à partir de `repoName`. Le `destination` de l’`Application` utilise `{{ .cluster }}` et `{{ .namespace }}` pour éviter que dev et prod ciblent le même namespace par défaut.
+Le `repoURL` n’est pas stocké dans les fichiers d’environnement. Il est reconstruit dans le template à partir de `repoName`. Le `destination` de l’`Application` utilise `{{ .cluster }}` et `{{ .namespace }}` lus à la racine du fichier version (communs à tous les services de cet env).
+
 
 Point clé : l’`ApplicationSet` ne sélectionne pas les fichiers de config partagée. Il transmet uniquement l’environnement (`env`) et les valeurs du service à Helm. Le chargement automatique des profils techniques se fait dans `charts/saga-shared-config/templates/configmap.yaml`.
 

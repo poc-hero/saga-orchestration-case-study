@@ -1,14 +1,13 @@
+# Un namespace et un cluster Argo CD partages pour tout l'environnement dev.
 env: dev
+namespace: saga-dev
+cluster: in-cluster
 services:
   - name: site-service
     imageTag: "3.0.1.mongo"
     replicas: "1"
-    cluster: in-cluster
-    namespace: site-service-dev
     ingressHost: site-service.dev.saga-k8s.local
   - name: uaa-service
     imageTag: "1.0.0"
     replicas: "1"
-    cluster: in-cluster
-    namespace: uaa-service-dev
     ingressHost: uaa-service.dev.saga-k8s.local
