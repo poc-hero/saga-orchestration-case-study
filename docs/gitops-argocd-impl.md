@@ -1109,6 +1109,7 @@ kubectl --context "$TARGET_CONTEXT" -n site-service describe deploy/site-service
 | `argocd/bootstrap/root-application.yaml` | `cluster-argocd` | connecte Argo CD au dossier `saga-delivery/argocd` |
 | repo infra Ansible (`/Users/mac/Documents/projet/infomaniak/infra-openstack/ansible`) | infrastructure externe | orchestre le bootstrap et centralise les variables |
 | script bash appele par Ansible | workstation / automation runner | execute `envsubst`, `kubectl apply`, `argocd login`, `argocd cluster add` |
+| `saga-delivery/argocd/00-namespaces.yaml` | Git, rendu sur `cluster-argocd` | cree les namespaces `saga-dev` / `saga-prod` (prefix `00-` pour appliquer avant `applicationset.yaml`) |
 | `saga-delivery/argocd/applicationset.yaml` | Git, rendu sur `cluster-argocd` | genere les `Application` |
 | `saga-delivery/serviceCatalog.yaml` | Git | metadonnees stables par service (`repoName`, `chartPath`) |
 | `saga-delivery/versions/saga-<env>.yaml` | Git | variations par environnement |

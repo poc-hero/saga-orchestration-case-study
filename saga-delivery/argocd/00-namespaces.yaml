@@ -1,0 +1,17 @@
+# Applique avant les autres manifests du dossier (prefix 00-).
+# Garantit que les namespaces existent meme si CreateNamespace sur les Applications enfants est absent ou en retard.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: saga-dev
+  labels:
+    app.kubernetes.io/part-of: saga
+    saga.pocmaster.io/env: dev
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: saga-prod
+  labels:
+    app.kubernetes.io/part-of: saga
+    saga.pocmaster.io/env: prod
