@@ -1,4 +1,3 @@
-# Variations d'environnement prod — possibilité d'un autre cluster / NS / host par service.
 env: prod
 services:
   - name: site-service

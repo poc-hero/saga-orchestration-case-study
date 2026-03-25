@@ -23,9 +23,9 @@ spec:
                     elementsYaml: |
                       {{- $items := list }}
                       {{- range .services }}
-                      {{- $service := . }}
+                      {{- $svc := . }}
                       {{- range $env := list "dev" "prod" }}
-                      {{- $items = append $items (merge $service (dict "env" $env)) }}
+                      {{- $items = append $items (merge (dict) $svc (dict "env" $env)) }}
                       {{- end }}
                       {{- end }}
                       {{ $items | toJson }}
@@ -41,7 +41,7 @@ spec:
                       {{- $env := .env -}}
                       {{- $items := list -}}
                       {{- range .services }}
-                      {{- $items = append $items (merge . (dict "env" $env)) -}}
+                      {{- $items = append $items (merge (dict) . (dict "env" $env)) -}}
                       {{- end }}
                       {{ $items | toJson }}
   template:

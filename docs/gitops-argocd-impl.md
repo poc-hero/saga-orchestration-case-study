@@ -529,10 +529,14 @@ python3 -c 'import yaml,sys; print(yaml.safe_load(open("saga-delivery/versions/s
 
 L'`ApplicationSet` doit :
 
-- lire `serviceCatalog.yaml`
-- lire `versions/saga-*.yaml`
-- fusionner les services par `name` **et** `env` (merge generator ; sans `env` dans les cles, erreur *Duplicate key* sur `name` quand dev et prod declarent le meme service)
+- lire `serviceCatalog.yaml` (metadonnees stables : `repoName`, `chartPath`)
+- lire `versions/saga-*.yaml` (variations par environnement)
+- fusionner les services par `name` **et** `env` via le merge generator
 - generer une `Application` par service et par environnement
+
+Le premier matrix expanse chaque service du catalogue sur chaque env (`list "dev" "prod"`) ; le second matrix lit les fichiers version. Le merge combine les deux par `(name, env)`.
+
+**Point technique Sprig** : `merge` mute son premier argument. Dans une boucle imbriquee `range services / range envs`, il faut ecrire `merge (dict) $svc (dict "env" $env)` pour merger dans un **nouveau** dict a chaque iteration, sinon toutes les copies pointent sur le meme objet et les cles ne sont plus uniques.
 
 ### Exemple d'`applicationset.yaml`
 
@@ -562,9 +566,9 @@ spec:
                     elementsYaml: |
                       {{- $items := list }}
                       {{- range .services }}
-                      {{- $service := . }}
+                      {{- $svc := . }}
                       {{- range $env := list "dev" "prod" }}
-                      {{- $items = append $items (merge $service (dict "env" $env)) }}
+                      {{- $items = append $items (merge (dict) $svc (dict "env" $env)) }}
                       {{- end }}
                       {{- end }}
                       {{ $items | toJson }}
@@ -580,7 +584,7 @@ spec:
                       {{- $env := .env -}}
                       {{- $items := list -}}
                       {{- range .services }}
-                      {{- $items = append $items (merge . (dict "env" $env)) -}}
+                      {{- $items = append $items (merge (dict) . (dict "env" $env)) -}}
                       {{- end }}
                       {{ $items | toJson }}
   template:
@@ -626,7 +630,7 @@ Seules les verifications locales sont possibles :
 cd "$REPO_ROOT"
 
 # Verifier la presence des elements cles dans applicationset.yaml
-rg "path: \"versions/saga-\\*\\.yaml\"|serviceCatalog.yaml|mergeKeys" "saga-delivery/argocd/applicationset.yaml"
+rg "path: \"versions/saga-\\*\\.yaml\"|serviceCatalog|mergeKeys" "saga-delivery/argocd/applicationset.yaml"
 
 # Verifier que les fichiers lus par l'ApplicationSet existent
 ls saga-delivery/serviceCatalog.yaml saga-delivery/versions/saga-dev.yaml saga-delivery/versions/saga-prod.yaml
@@ -1104,7 +1108,7 @@ kubectl --context "$TARGET_CONTEXT" -n site-service describe deploy/site-service
 | repo infra Ansible (`/Users/mac/Documents/projet/infomaniak/infra-openstack/ansible`) | infrastructure externe | orchestre le bootstrap et centralise les variables |
 | script bash appele par Ansible | workstation / automation runner | execute `envsubst`, `kubectl apply`, `argocd login`, `argocd cluster add` |
 | `saga-delivery/argocd/applicationset.yaml` | Git, rendu sur `cluster-argocd` | genere les `Application` |
-| `saga-delivery/serviceCatalog.yaml` | Git | metadonnees stables par service |
+| `saga-delivery/serviceCatalog.yaml` | Git | metadonnees stables par service (`repoName`, `chartPath`) |
 | `saga-delivery/versions/saga-<env>.yaml` | Git | variations par environnement |
 | `saga-delivery/charts/saga-service-lib` | Helm | ressources Kubernetes standard |
 | `saga-delivery/charts/saga-shared-config` | Helm | ConfigMap des profils techniques partages |

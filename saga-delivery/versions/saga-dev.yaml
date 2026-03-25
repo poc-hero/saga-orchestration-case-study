@@ -1,7 +1,3 @@
-# Variations d'environnement dev — une ligne par service.
-# cluster     : nom du cluster enregistré dans Argo CD (argocd cluster add ... --name <cluster>)
-# namespace   : namespace Kubernetes cible (évite le conflit dev/prod sur le même NS)
-# ingressHost : host Ingress exposé pour ce déploiement
 env: dev
 services:
   - name: site-service
