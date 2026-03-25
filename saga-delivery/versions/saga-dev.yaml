@@ -1,7 +1,8 @@
-# Un namespace et un cluster Argo CD partages pour tout l'environnement dev.
+# Dev : workloads sur le cluster applicatif (ex. API K8s 84.234.26.236), pas sur le cluster ou tourne Argo CD.
+# `cluster` = nom enregistre dans Argo CD pour ce cluster (`argocd cluster list` -> destination.name). Pas "in-cluster".
 env: dev
 namespace: saga-dev
-cluster: in-cluster
+cluster: cluster-workload
 services:
   - name: site-service
     imageTag: "3.0.1.mongo"

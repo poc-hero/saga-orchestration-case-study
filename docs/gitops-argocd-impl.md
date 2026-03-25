@@ -28,6 +28,10 @@ Il decrit aussi la separation de responsabilites entre ce depot applicatif et le
 | `cluster-target` | heberge les microservices | namespaces applicatifs (`site-service`, `uaa-service`, `saga-dev`, `saga-prod`, etc.), `Deployment`, `Service`, `ConfigMap`, `Ingress` |
 | `workstation` | poste d'administration | `git`, `kubectl`, `helm`, `argocd`, edition des fichiers |
 
+**Separation reelle (exemple)** : Argo CD peut tourner sur un cluster A ; `site-service` et `uaa-service` sont deployes sur un **autre** cluster B (ex. API Kubernetes `84.234.26.236`). Dans `versions/saga-*.yaml`, le champ **`cluster`** est le **nom Argo CD** du cluster B (`destination.name` dans l’`Application`), enregistre via `argocd cluster add`, **pas** `in-cluster`.
+
+**Vault** : l’URI HTTP(S) du serveur Vault (ex. `84.234.25.73:30200`) est joignable **depuis les pods sur le cluster B** (firewall / routes). La methode d’auth Kubernetes dans Vault doit etre configuree pour **l’API du cluster B** (TokenReview sur le meme cluster qui emet les JWT des pods), pas pour le cluster Argo CD.
+
 ### Flux cible
 
 ```text
@@ -447,14 +451,14 @@ services:
 
 ### 4.2 `versions/saga-dev.yaml`
 
-Un **namespace** et un **cluster** Argo CD partages par environnement (`namespace` et `cluster` a la racine du fichier) : toutes les apps de l'env deployent vers le meme `destination` (ex. `saga-dev` + `in-cluster`). Chaque service declare encore le **host** Ingress.
+Un **namespace** et un **cluster cible** partages par environnement (`namespace` et `cluster` a la racine du fichier) : toutes les apps de l'env deployent vers le meme `destination` sur le **cluster des workloads** (souvent **distinct** du cluster ou tourne Argo CD). Chaque service declare encore le **host** Ingress.
 
 Exemple :
 
 ```yaml
 env: dev
 namespace: saga-dev
-cluster: cluster-target
+cluster: saga-workload-dev
 services:
   - name: site-service
     imageTag: "3.0.1.mongo"
@@ -469,17 +473,17 @@ services:
 | Champ | Role |
 |--------|------|
 | `namespace` (racine) | Namespace Kubernetes **commun** a tous les services de cet env (`spec.destination.namespace`) |
-| `cluster` (racine) | `spec.destination.name` — nom du cluster enregistre dans Argo CD (`in-cluster`, `cluster-target`, etc.) |
+| `cluster` (racine) | `spec.destination.name` — nom du cluster **workload** enregistre dans Argo CD (`argocd cluster list`), ex. `saga-workload-dev` ; **pas** le cluster Argo CD sauf si tout est colocalise |
 | `ingressHost` (par service) | Passe en parametre Helm `ingress.host` pour le chart service |
 
 ### 4.3 `versions/saga-prod.yaml`
 
-Meme structure ; tu peux utiliser un **autre** `cluster` pour la prod (ex. `cluster-target-prod`) si l'infra le prevoit.
+Meme structure ; en prod, un autre `cluster` Argo CD si l'infra le prevoit (ex. `saga-workload-prod`).
 
 ```yaml
 env: prod
 namespace: saga-prod
-cluster: cluster-target
+cluster: saga-workload-prod
 services:
   - name: site-service
     imageTag: "3.0.5"
@@ -831,7 +835,7 @@ Quand Argo CD synchronise cette Application :
 - il applique sur **`cluster-argocd`** les manifests trouves dans ce chemin
 
 L'ApplicationSet est une ressource custom Argo CD ; elle doit vivre sur le cluster où Argo CD tourne (`cluster-argocd`).
-Les manifests applicatifs (Deployment, Service, ConfigMap, etc.) iront eux vers `cluster-target` via les Applications enfants generees.
+Les manifests applicatifs (Deployment, Service, ConfigMap, etc.) iront eux vers le cluster workloads (ex. `saga-workload-dev` / `saga-workload-prod` selon `versions/saga-*.yaml`) via les Applications enfants generees.
 
 Parmi les manifests appliques sur `cluster-argocd`, il y a `applicationset.yaml`.
 
@@ -841,8 +845,8 @@ Une fois l'`ApplicationSet` creee comme ressource Kubernetes, le controleur `App
 - execute les generators
 - cree les Applications enfants (ex. `site-service-dev`, `uaa-service-prod`)
 
-Chaque Application enfant a `destination.name: cluster-target` et `destination.namespace: saga-dev` ou `saga-prod` (un NS par env, partage entre services).
-Lors de leur sync, ce sont elles qui appliquent les manifests applicatifs sur `cluster-target`.
+Chaque Application enfant a `destination.name` egal au champ `cluster` de `versions/saga-*.yaml` (ex. `saga-workload-dev`) et `destination.namespace: saga-dev` ou `saga-prod` (un NS par env, partage entre services).
+Lors de leur sync, ce sont elles qui appliquent les manifests applicatifs sur ce cluster workloads.
 
 Cela explique pourquoi les verifications suivantes ne sont valides qu'apres le bootstrap complet :
 
@@ -862,7 +866,7 @@ kubectl --context "$ARGOCD_CONTEXT" -n "$ARGOCD_NAMESPACE" get applications.argo
 
 ### Objectif
 
-Permettre aux `Application` generees de deployer vers `cluster-target`.
+Permettre aux `Application` generees de deployer vers le cluster workloads (ex. nom `saga-workload-dev`, API ex. `84.234.26.236`). Voir aussi `argocd/bootstrap/register-saga-workload-dev.md`.
 
 ### Approche recommandee
 
@@ -872,23 +876,23 @@ Modele retenu :
 
 - Ansible fournit les variables et secrets
 - le script bash effectue le `argocd login`
-- le script bash lance `argocd cluster add "$TARGET_CONTEXT" --name cluster-target`
+- le script bash lance `argocd cluster add "$TARGET_CONTEXT" --name saga-workload-dev` (aligne sur `saga-delivery/versions/saga-dev.yaml`)
 
 Exemple de logique dans le script appele par Ansible :
 
 ```bash
 argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_ADMIN_TOKEN" --grpc-web
-argocd cluster add "$TARGET_CONTEXT" --name cluster-target --yes
+argocd cluster add "$TARGET_CONTEXT" --name saga-workload-dev --yes
 ```
 
-Le nom logique `cluster-target` doit rester stable, car il est reference dans `spec.destination.name` de l'`ApplicationSet`.
+Le nom logique (`saga-workload-dev`, etc.) doit rester stable, car il est reference dans `versions/saga-*.yaml` puis `spec.destination.name` de l'`ApplicationSet`.
 
 ### Option de reference avec CLI Argo CD
 
 ```bash
 # workstation
 argocd login <argocd-server>
-argocd cluster add "$TARGET_CONTEXT" --name cluster-target
+argocd cluster add "$TARGET_CONTEXT" --name saga-workload-dev
 ```
 
 ### Verification
@@ -900,11 +904,11 @@ kubectl --context "$ARGOCD_CONTEXT" -n "$ARGOCD_NAMESPACE" get secrets
 
 ### Resultat attendu
 
-Le cluster cible apparait dans Argo CD avec un nom stable, par exemple :
+Le cluster workloads apparait dans Argo CD avec un nom stable, par exemple :
 
-- `cluster-target`
+- `saga-workload-dev`
 
-Ce nom doit correspondre a `destination.name` dans l'`ApplicationSet`.
+Ce nom doit correspondre au champ `cluster` dans `versions/saga-dev.yaml` et donc a `destination.name` des `Application` generees.
 
 ---
 

@@ -1,6 +1,7 @@
+# Meme principe que dev : cluster cible = workloads (souvent distinct d'Argo CD).
 env: prod
 namespace: saga-prod
-cluster: in-cluster
+cluster: cluster-workload
 services:
   - name: site-service
     imageTag: "3.0.5"
