@@ -531,7 +531,7 @@ L'`ApplicationSet` doit :
 
 - lire `serviceCatalog.yaml`
 - lire `versions/saga-*.yaml`
-- fusionner les services par `name`
+- fusionner les services par `name` **et** `env` (merge generator ; sans `env` dans les cles, erreur *Duplicate key* sur `name` quand dev et prod declarent le meme service)
 - generer une `Application` par service et par environnement
 
 ### Exemple d'`applicationset.yaml`
@@ -549,6 +549,7 @@ spec:
     - merge:
         mergeKeys:
           - name
+          - env
         generators:
           - matrix:
               generators:
@@ -558,7 +559,14 @@ spec:
                     files:
                       - path: saga-delivery/serviceCatalog.yaml
                 - list:
-                    elementsYaml: "{{ .services | toJson }}"
+                    elementsYaml: |
+                      {{- $items := list }}
+                      {{- range .services }}
+                      {{- range $env := list "dev" "prod" }}
+                      {{- $items = append $items (merge . (dict "env" $env)) }}
+                      {{- end }}
+                      {{- end }}
+                      {{ $items | toJson }}
           - matrix:
               generators:
                 - git:

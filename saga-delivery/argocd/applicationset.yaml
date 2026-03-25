@@ -10,6 +10,7 @@ spec:
     - merge:
         mergeKeys:
           - name
+          - env
         generators:
           - matrix:
               generators:
@@ -19,7 +20,14 @@ spec:
                     files:
                       - path: saga-delivery/serviceCatalog.yaml
                 - list:
-                    elementsYaml: "{{ .services | toJson }}"
+                    elementsYaml: |
+                      {{- $items := list }}
+                      {{- range .services }}
+                      {{- range $env := list "dev" "prod" }}
+                      {{- $items = append $items (merge . (dict "env" $env)) }}
+                      {{- end }}
+                      {{- end }}
+                      {{ $items | toJson }}
           - matrix:
               generators:
                 - git:
