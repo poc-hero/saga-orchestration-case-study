@@ -8,6 +8,6 @@ services:
     replicas: "1"
     ingressHost: site-service.dev.saga-k8s.local
   - name: uaa-service
-    imageTag: "1.0.0"
-    replicas: "1"
+    imageTag: "latest"
+    replicas: "2"
     ingressHost: uaa-service.dev.saga-k8s.local
