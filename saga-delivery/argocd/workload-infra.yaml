@@ -1,0 +1,25 @@
+# Application Argo CD qui déploie les ressources infra (namespaces, ServiceAccount)
+# sur le cluster WORKLOADS (saga-workload-dev), pas sur le cluster Argo CD.
+# Synchronisée automatiquement par la root application (saga-delivery/argocd/).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: saga-workload-infra
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/poc-hero/saga-orchestration-case-study.git
+    targetRevision: HEAD
+    path: saga-delivery/cluster-resources
+  destination:
+    name: cluster-workload
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
