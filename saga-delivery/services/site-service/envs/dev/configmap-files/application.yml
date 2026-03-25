@@ -1,4 +1,9 @@
-# Config applicative site-service (dev)
+# Config applicative site-service (dev) — profil par défaut (monté sous /config)
 spring:
   application:
     name: site-service
+
+site:
+  services:
+    uaa:
+      url: http://uaa-service:8080

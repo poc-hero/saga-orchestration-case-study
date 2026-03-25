@@ -36,6 +36,9 @@ probes:
 serviceAccount:
   name: saga-app
 
+configMountFilesFromConfigMap: true
+configMountSharedConfigMap: true
+
 imagePullSecrets: []
 
 vault:

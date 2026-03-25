@@ -363,9 +363,8 @@ Exemple `saga-delivery/services/site-service/envs/dev/values.yaml` :
 
 ```yaml
 env:
-  SPRING_PROFILES_ACTIVE: "dev,mongo,datadog"
+  SPRING_PROFILES_ACTIVE: "mongo,vault"
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0"
-  SITE_SERVICES_UAA_URL: "http://uaa-service:8080"
   LOG_LEVEL: "DEBUG"
 
 resources:
@@ -376,6 +375,8 @@ resources:
     cpu: 500m
     memory: 512Mi
 ```
+
+L'URL UAA (`http://uaa-service:8080`) est definie dans `envs/<env>/configmap-files/application.yml` sous `site.services.uaa.url` (profil par defaut), pas dans `env`.
 
 `deploymentEnv` et `saga-shared-config.deploymentEnv` ne sont pas dupliques ici : l'`ApplicationSet` les injecte via des parametres Helm (`{{ .env }}`). Pour un `helm template` local sur ce chart, passer explicitement :
 
@@ -1041,7 +1042,7 @@ Puis activer le profil dans le service concerne :
 ```yaml
 deploymentEnv: dev
 env:
-  SPRING_PROFILES_ACTIVE: "dev,mongo,datadog,rabbit"
+  SPRING_PROFILES_ACTIVE: "mongo,vault,rabbit"
 ```
 
 Verification :

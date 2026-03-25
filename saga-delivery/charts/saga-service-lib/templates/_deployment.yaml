@@ -34,12 +34,56 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if default false .Values.configMountFilesFromConfigMap }}
+      volumes:
+        - name: app-config
+          configMap:
+            name: {{ include "saga-service-lib.fullname" . }}-config
+        {{- if default false .Values.configMountSharedConfigMap }}
+        - name: shared-config
+          configMap:
+            name: {{ printf "%s-shared-config" .Release.Name | trunc 63 | trimSuffix "-" }}
+        {{- end }}
+      {{- end }}
       containers:
         - name: app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ int .Values.service.port }}
+          {{- $mount := default false .Values.configMountFilesFromConfigMap }}
+          {{- if $mount }}
+          env:
+            {{- range $key, $val := .Values.env | default dict }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+            {{- $additional := "" }}
+            {{- if $mount }}
+            {{- $additional = "optional:file:/config/" }}
+            {{- if default false .Values.configMountSharedConfigMap }}
+            {{- $additional = printf "%s,optional:file:/config/shared/" $additional }}
+            {{- end }}
+            {{- end }}
+            {{- if and .Values.vault (eq .Values.vault.enabled true) }}
+            {{- if $additional }}
+            {{- $additional = printf "%s,optional:file:/vault/secrets/" $additional }}
+            {{- else }}
+            {{- $additional = "file:/vault/secrets/" }}
+            {{- end }}
+            {{- end }}
+            {{- if $additional }}
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: {{ $additional | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: app-config
+              mountPath: /config
+            {{- if default false .Values.configMountSharedConfigMap }}
+            - name: shared-config
+              mountPath: /config/shared
+            {{- end }}
+          {{- else }}
           {{- if and .Values.vault (eq .Values.vault.enabled true) }}
           env:
             - name: SPRING_CONFIG_ADDITIONAL_LOCATION
@@ -48,6 +92,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "saga-service-lib.fullname" . }}-config
+          {{- end }}
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.liveness.path }}

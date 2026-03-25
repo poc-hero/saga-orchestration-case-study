@@ -30,3 +30,7 @@ k8s/**/secrets/
 **/target/
 *.tfstate
 *.tfstate.*
+
+# Helm — archives de dépendances & fichiers de verrouillage (helm dependency update)
+*.tgz
+*.lock

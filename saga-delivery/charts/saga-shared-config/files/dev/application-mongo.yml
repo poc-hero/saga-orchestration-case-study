@@ -1,5 +1,15 @@
-# Profil technique Mongo (dev) — placeholder
+# Profil mongo — dev (saga-delivery) — uniquement Spring Data Mongo + santé (pas de config Vault)
+# Nécessite le profil vault actif pour que ${mongodb-uri} soit défini (voir application-vault.yml)
 spring:
+  autoconfigure:
+    exclude: []
   data:
     mongodb:
-      uri: ${MONGO_URI:mongodb://localhost:27017/sagas}
+      uri: ${mongodb-uri}
+
+management:
+  health:
+    mongo:
+      enabled: true
+
+mongodb-uri: "mongodb://${vault.mongo.username}:${vault.mongo.password}@${vault.mongo.host}:${vault.mongo.port}/saga?directConnection=true&authSource=admin"

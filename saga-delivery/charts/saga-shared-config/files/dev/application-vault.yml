@@ -1,11 +1,10 @@
-# Option B — Spring Cloud Vault (profil local « dev » ; en cluster GitOps utiliser le profil « vault » + application-vault.yml delivery)
-# Prérequis : auth kubernetes + rôle app-role + secret dans Vault
+# Profil vault — dev (saga-delivery) : Spring Cloud Vault + paramètres d’accès Mongo (hors profil mongo)
 spring:
   config:
     import: optional:vault://
   cloud:
     vault:
-      uri: ${VAULT_ADDR:http://127.0.0.1:8200}
+      uri: http://84.234.25.73:30200
       authentication: KUBERNETES
       kubernetes:
         role: app-role
@@ -15,3 +14,5 @@ spring:
         backend: secret
         default-context: app/saga/dev/site-service
         application-name: app/saga/dev/site-service
+
+

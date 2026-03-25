@@ -1,6 +1,0 @@
-# Profil technique Datadog (dev) — placeholder
-management:
-  metrics:
-    export:
-      datadog:
-        enabled: false

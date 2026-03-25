@@ -1,9 +1,0 @@
-dependencies:
-- name: saga-service-lib
-  repository: file://../../charts/saga-service-lib
-  version: 1.0.0
-- name: saga-shared-config
-  repository: file://../../charts/saga-shared-config
-  version: 1.0.0
-digest: sha256:23eb04ee30736e2d9c44573e34b19394d85db9006c122979471601a793c5f463
-generated: "2026-03-24T14:19:22.736567-04:00"

@@ -36,6 +36,11 @@ probes:
 serviceAccount:
   name: saga-app
 
+# Monte les YAML du ConfigMap sous /config (SPRING_CONFIG_ADDITIONAL_LOCATION) pour charger application-vault.yml par env
+configMountFilesFromConfigMap: true
+# Monte saga-shared-config (subchart) sous /config/shared — profils mongo, vault, kafka partagés
+configMountSharedConfigMap: true
+
 imagePullSecrets: []
 
 vault:

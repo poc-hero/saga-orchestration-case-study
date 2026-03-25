@@ -10,6 +10,3 @@ data:
   {{ base $path }}: |
     {{- $.Files.Get $path | nindent 4 }}
   {{- end }}
-  {{- range $key, $val := .Values.env }}
-  {{ $key }}: {{ $val | quote }}
-  {{- end }}

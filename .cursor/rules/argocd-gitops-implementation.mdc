@@ -173,11 +173,11 @@ Important : cette dépendance suffit pour que Helm rende aussi `charts/saga-shar
 ```yaml
 deploymentEnv: dev
 env:
-  SPRING_PROFILES_ACTIVE: "dev,mongo,datadog"
+  SPRING_PROFILES_ACTIVE: "mongo,vault"
   JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0"
 ```
 
-Le service déclare simplement ses profils Spring actifs. Si `application-mongo.yml` et `application-datadog.yml` sont fournis par la dépendance `saga-shared-config` pour `dev`, Spring les consomme automatiquement car leurs profils sont actifs. Si `application-kafka.yml` est aussi présent mais que `kafka` n’est pas dans `SPRING_PROFILES_ACTIVE`, il reste monté mais non activé.
+Le service déclare simplement ses profils Spring actifs. Si `application-mongo.yml` est fourni (chart service ou `saga-shared-config`) pour `dev`, Spring le consomme lorsque le profil `mongo` est actif. Les fichiers `application-datadog.yml` / `application-kafka.yml` restent disponibles dans le chart partagé mais ne sont pas chargés tant que les profils `datadog` / `kafka` ne sont pas ajoutés à `SPRING_PROFILES_ACTIVE`.
 
 ---
 
