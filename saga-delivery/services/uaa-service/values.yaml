@@ -39,7 +39,8 @@ serviceAccount:
 configMountFilesFromConfigMap: true
 configMountSharedConfigMap: true
 
-imagePullSecrets: []
+imagePullSecrets:
+  - name: dockerhub-creds
 
 vault:
   enabled: false
