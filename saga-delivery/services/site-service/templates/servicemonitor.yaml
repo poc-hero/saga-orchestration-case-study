@@ -1,0 +1,21 @@
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "saga-service-lib.fullname" . }}
+  namespace: {{ .Values.monitoring.serviceMonitor.namespace }}
+  labels:
+    observability-agent/enabled: "true"
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  endpoints:
+    - path: {{ .Values.monitoring.serviceMonitor.path }}
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      targetPort: {{ .Values.service.port }}
+{{- end }}

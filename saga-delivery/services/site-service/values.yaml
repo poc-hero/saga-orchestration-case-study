@@ -9,6 +9,13 @@ service:
   type: ClusterIP
   port: 8080
 
+monitoring:
+  serviceMonitor:
+    enabled: false
+    namespace: observability-agent
+    path: /actuator/prometheus
+    interval: 30s
+
 ingress:
   enabled: true
   className: "traefik"

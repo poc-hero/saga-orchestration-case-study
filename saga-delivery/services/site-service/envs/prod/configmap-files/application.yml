@@ -3,6 +3,16 @@ spring:
   application:
     name: site-service
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,refresh,prometheus
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
 site:
   services:
     uaa:

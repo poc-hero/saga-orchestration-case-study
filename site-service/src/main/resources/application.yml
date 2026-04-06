@@ -13,10 +13,14 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,refresh
+        include: health,refresh,prometheus
   endpoint:
     refresh:
       enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 
 site:
   services:
