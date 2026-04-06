@@ -5,7 +5,7 @@ namespace: saga-dev
 cluster: cluster-workload
 services:
   - name: site-service
-    imageTag: "4.0.2.prometheus"
+    imageTag: "4.0.3.prometheus"
     replicas: "1"
     ingressHost: site-service.dev.saga-k8s.local
   - name: uaa-service

@@ -21,6 +21,7 @@ import java.util.Map;
 @RefreshScope
 public class SiteController {
 
+
     private static final Logger log = LoggerFactory.getLogger(SiteController.class);
     private final SiteCreationSaga siteCreationSaga;
     private final String mySecret;
