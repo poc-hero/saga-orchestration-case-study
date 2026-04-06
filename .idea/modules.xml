@@ -4,6 +4,7 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/indexation-service/indexation-service.iml" filepath="$PROJECT_DIR$/indexation-service/indexation-service.iml" />
       <module fileurl="file://$PROJECT_DIR$/saga-orchestration-case-study.iml" filepath="$PROJECT_DIR$/saga-orchestration-case-study.iml" />
+      <module fileurl="file://$PROJECT_DIR$/site-service/site-service.iml" filepath="$PROJECT_DIR$/site-service/site-service.iml" />
     </modules>
   </component>
 </project>
